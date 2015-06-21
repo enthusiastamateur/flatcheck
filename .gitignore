@@ -1,0 +1,6 @@
+#ignore the following files and directories
+.idea
+app
+!app/flatcheck.ini
+target
+*~
