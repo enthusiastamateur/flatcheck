@@ -12,3 +12,6 @@ The program is managed with sbt, which makes the source code really lightweight:
 
 The resulting .jar file will be at ./target/scala-version/
 
+## Disclaimer
+
+This app comes with absolutely now warranty. Also, please do not use it for unethical purposes like spamming or generating unnecessary traffic.
