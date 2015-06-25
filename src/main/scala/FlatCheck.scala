@@ -1,5 +1,5 @@
 /**
- * Created by tamas on 2014.11.22..
+ * Created by Tamas on 2014.11.22..
  *
  * The easiest way to use the selenium and javaMail libraries is to import them from an online repo
  * for this, go to http://mvnrepository.com and find the sbt line you have to add to your build.sbt
@@ -9,7 +9,9 @@
 
 import org.apache.commons.mail._
 import org.fluentlenium.core.FluentAdapter
+import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.firefox.FirefoxDriver
+import org.openqa.selenium.ie.InternetExplorerDriver
 import scala.io.Source
 import java.util.Calendar
 import java.io.FileWriter
@@ -108,7 +110,12 @@ object FlatCheck extends App {
   def mainloop(iter: Int) : Unit = {
 
     // Initalize browser
-    val browser = new FluentAdapter(new FirefoxDriver())
+    val browser = options.get("general","browser").toLowerCase match
+    {
+      case "ie" | "internetexplorer" | "explorer" => new FluentAdapter(new InternetExplorerDriver())
+      case "chrome" => new FluentAdapter(new ChromeDriver())
+      case _ => new FluentAdapter(new FirefoxDriver())
+    }
 
     def iterateThroughPages(site: String, checkedAlreadyLinks: List[String], linksAcc: List[String]) : List[String] = {
       val oldFirstHit = browser.$(options.get(site, "querystring")).get(0).getAttribute("href")
