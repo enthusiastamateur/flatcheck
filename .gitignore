@@ -1,6 +1,10 @@
 #ignore the following files and directories
 .idea
-app
-!app/flatcheck.ini
+app/Windows/*.jar
+app/Linux/*.jar
+app/*.txt
+!app/Linux/flatcheck.ini
+!app/Windows/flatcheck.ini
+!app/Windows/FlatCheck.cmd
 target
 *~
