@@ -6,21 +6,21 @@
  * Then refresh project
  *
  */
+package flatcheck
+
+import java.io.{File, FileWriter}
+import java.util.{Calendar, Scanner}
 
 import org.apache.commons.mail._
 import org.fluentlenium.core.FluentAdapter
 import org.fluentlenium.core.domain.{FluentList, FluentWebElement}
-import org.openqa.selenium.{JavascriptExecutor, By, WebElement, WebDriver}
+import org.ini4j.ConfigParser
 import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.ie.InternetExplorerDriver
-import java.util.Calendar
-import java.io.FileWriter
-import java.io.File
-import org.ini4j.ConfigParser
+import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
+
 import scala.collection.JavaConversions._
-import java.lang.Thread
-import java.util.Scanner
 
 class DataFile(filename: String) {
 
