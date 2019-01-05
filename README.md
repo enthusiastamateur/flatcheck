@@ -14,9 +14,9 @@ The program is built using sbt, using the `sbt-native-packager` plugin.
 
 This will create Unix & Windows start scrips under `target\universal\stage\bin`. You can use this version to test locally.
 
-To create a package with the libraries included, call
+To create a zip file with the startup script and the libraries included, call
 
-`jdkPackager:packageBin`
+`universal:packageBin`
 
 ## Disclaimer
 
