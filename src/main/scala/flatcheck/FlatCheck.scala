@@ -11,24 +11,30 @@ package flatcheck
 import java.io.{File, FileWriter}
 import java.util.{Calendar, Scanner}
 
+import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings}
 import org.apache.commons.mail._
-import org.fluentlenium.core.FluentAdapter
+import org.fluentlenium.adapter.{FluentAdapter, FluentStandalone, ThreadLocalFluentControlContainer}
+import org.fluentlenium.core.FluentDriver
 import org.fluentlenium.core.domain.{FluentList, FluentWebElement}
 import org.ini4j.ConfigParser
 import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
+import org.openqa.selenium.NoSuchElementException
 
 import scala.collection.JavaConversions._
+import scala.io.Source
+import com.typesafe.scalalogging.LazyLogging
 
-class DataFile(filename: String) {
+class DataFile(filename: String) extends LazyLogging {
 
   // Append to end
   def appendFlat(link: String, emailSent: Boolean): Unit = {
     val file = new File(filename)
     if (!file.exists())   // write fejlec
     {
+      logger.trace(s"    Creating new DataFile with name $filename")
       file.createNewFile()
       val writer = new FileWriter(file)
       writer.write("Timestamp\tID\tLink\tEmail sent")
@@ -37,6 +43,7 @@ class DataFile(filename: String) {
     }
     // Append to the end of file
     val appender = new FileWriter(filename,true)
+    logger.trace(s"    Appending link: $link")
     appender.write("\n" + Calendar.getInstance.getTime.toString + "\t" + link + "\t" + emailSent.toString)
     appender.flush()
     appender.close()
@@ -48,25 +55,34 @@ class DataFile(filename: String) {
     if ( file.exists() )
     {
       val contents = for (
-        line <- io.Source.fromFile(filename).getLines.toList
-        if line.isEmpty    // skip empty  lines
-      )    // split the lines
-      yield line.split("\t").toList
+        line <- Source.fromFile(filename).getLines.toList
+        if !line.isEmpty    // skip empty  lines
+      ) yield {
+        line.split("\t").toList
+      }
       if (contents.isEmpty) {
-        println("  No previously checked links found in file " + filename)
+        logger.info(s"    No previously checked links found in file $filename")
         List()
-      } else contents.tail     // The head is the fejlec
+      } else {
+        logger.trace(s"    Loaded the following entries from $filename:\n${contents.tail}")
+        contents.tail
+      }     // The head is the fejlec
     } else {
-      println("  No checked links file found at " + filename )
+      logger.info(s"    No checked links file found at $filename")
       List()
     }
   }
 }
 
 
+class FluentWrapper(val webDriver: WebDriver) extends FluentStandalone with LazyLogging {
+  override def newWebDriver() : WebDriver = {
+    logger.trace(s"Passing in existing WebDriver: $webDriver")
+    webDriver
+  }
+}
 
-
-object FlatCheck extends App {
+object FlatCheck extends App with LazyLogging {
   // Initalize parser
   val options = new ConfigParser
   val iniName = "flatcheck.ini"
@@ -75,7 +91,7 @@ object FlatCheck extends App {
   } catch {
     case e: Exception =>
       val currDir = new File("a").getAbsolutePath.dropRight(1)
-      println("Couldn't read ini file: " + currDir + iniName + "\nExiting FlatCheck...")
+      logger.error("Couldn't read ini file: " + currDir + iniName + "\nExiting FlatCheck...")
       System.exit(1)
   }
   // read password
@@ -92,7 +108,7 @@ object FlatCheck extends App {
   {
     String.valueOf(stdIn.readPassword())
   }
-  println("Starting FlatCheck...")
+  logger.info("Starting FlatCheck...")
 
   def sendMessage(to: List[String], subject: String, msg: String) = {
     val email = new SimpleEmail()
@@ -105,7 +121,7 @@ object FlatCheck extends App {
     to.foreach(address => email.addTo(address))
     email.setMsg(msg)
     email.send()
-    println("  Email sent to: " + to + "!")
+    logger.info("  Email sent to: " + to + "!")
   }
 
   // Email setup
@@ -113,7 +129,7 @@ object FlatCheck extends App {
   if (emailSubject.isEmpty) println("Email subject is not recognised, so emails will be sent without a subject!")
   val addAddresses : List[String] = options.get("general","sendto").split(",").toList
   if (addAddresses.isEmpty) {
-    println("Sendto email addresses are not recognised! Update the ini file and restart the application! Exiting...")
+    logger.error("Sendto email addresses are not recognised! Update the ini file and restart the application! Exiting...")
     System.exit(1)
   }
   // Initalize the main loop
@@ -136,11 +152,19 @@ object FlatCheck extends App {
     {
       case "ie" | "internetexplorer" | "explorer" => new InternetExplorerDriver()
       case "chrome" => new ChromeDriver()
+      case "jbrowser" => new JBrowserDriver(Settings.builder()
+        .blockAds(true)
+        .headless(true)
+        .javascript(true)
+        .ssl("trustanything")
+        .build())
       case _ => new FirefoxDriver()
     }
 
+
     // Create the fluent adapter for the webdriver
-    val browser = new FluentAdapter(driver)
+    val browser = new FluentWrapper(driver)
+    browser.init()
     // End of main loop initalization
     // -------------------------------------------------
 
@@ -163,14 +187,14 @@ object FlatCheck extends App {
           options.get(site, "maxscrolls").toInt
         } catch {
           case e:Exception =>
-            println("  Could not read number of max scrolls for site " + site + ". Using default value of 0.")
+            logger.trace("Could not read number of max scrolls for site " + site + ". Using default value of 0.")
             0
         }
 
         while (lastHeight != currHeight && count < maxScrolls)
         {
           jse.executeScript("window.scrollTo(0, document.body.scrollHeight);")
-          println("  Scrolled down page to bottom!")
+          logger.trace("  Scrolled down page to bottom!")
           Thread.sleep(1000)
           lastHeight = currHeight
           currHeight = jse.executeScript("return document.body.scrollHeight").asInstanceOf[Long]
@@ -184,18 +208,18 @@ object FlatCheck extends App {
           browser.$(linksSelector)
         } catch {
           case e: Exception =>
-            println("  Error locating links on site \"" + site + "\" using selector string: " + linksSelector)
+            logger.warn(s"Error locating links on site $site using selector string: $linksSelector. The exception was:\n$e")
             return List()
         }
         // Get the number of links found
         val foundLinksSize = foundLinks.size()
-        println("  Located " + foundLinksSize + " offer links on current page!")
+        logger.info("  Located " + foundLinksSize + " offer links on current page!")
 
         // Get new links on the current page
         val newLinksOnPage: List[String] = {
           for {
             i <- 0 until foundLinksSize
-            link: String = foundLinks.get(i).getAttribute("href").split('?').head
+            link: String = foundLinks.index(i).getElement.getAttribute("href").split('?').head
             if !checkedAlreadyLinks.contains(link)
           } yield link
         }.toList
@@ -206,16 +230,9 @@ object FlatCheck extends App {
           // First try locating using xpath
           Some(driver.findElement(By.xpath(nextPageButtonSelector)))
         } catch {
-          case e: Exception =>
-            // Try also using CSS selector
-            val buttonOpt: Option[WebElement] = try {
-              Some(driver.findElement(By.cssSelector(nextPageButtonSelector)))
-            } catch {
-              case e: Exception =>
-                println("  Next page button not found!")
-                None
-            }
-            buttonOpt
+          case e: NoSuchElementException =>
+            logger.trace(s"  Element with xpath selector $nextPageButtonSelector could not be found")
+            None
         }
 
         // If there is a new page button, click it and collect the links there as well. Otherwise, return what we have acquired so far
@@ -223,7 +240,7 @@ object FlatCheck extends App {
           case Some(nextPageButton) =>
             // Click on the new page button, and wait 5 seconds for everything to load, if we have not exhaused all the clicks
             if (clickCount < maxPageClicks) {
-              println("  Clicking on next page button with text '" + nextPageButton.getText + "'...")
+              logger.info(s"Clicking on next page button with text '${nextPageButton.getText}'...")
               nextPageButton.click()
               Thread.sleep(5000.toLong)
               iterateThroughPages(checkedAlreadyLinks, linksAcc ++ newLinksOnPage, clickCount + 1)
@@ -238,16 +255,15 @@ object FlatCheck extends App {
       // Body of getNewURLsFromSite
       if (site == "general") List() else        // The "general" tag does not correspond to a site
       {
-        println("  --------------------------------------")
-        println("  Site: " + site)
+        logger.info("  --------------------------------------")
+        logger.info("  Site: " + site)
         val filename = options.get(site,"datafile")
         val baseUrl = options.get(site, "baseurl")
         try {
           browser.goTo(baseUrl)
         } catch {
           case e: Exception =>
-            println("  Error loading site using URL:\n  " + baseUrl + "\n  Please check manually if it works!" +
-              "\n  Skipping it in this iteration...")
+            logger.warn(s"Error loading site using URL: $baseUrl, skipping it in this iteration. The exception was:\n$e")
             return List()
         }
         val checkedAlready: List[List[String]] = new DataFile(filename).readFlats
@@ -261,11 +277,11 @@ object FlatCheck extends App {
         {
           val dataFile = new DataFile(filename)
           newLinks.foreach(link => dataFile.appendFlat(link,emailSent = true))
-          println("  Found " + newLinks.size + " new offers!")
+          logger.info("  Found " + newLinks.size + " new offers!")
         }
         else
         {
-          println("  No new offers found!")
+          logger.info("  No new offers found!")
         }
         newLinks
 
@@ -278,17 +294,17 @@ object FlatCheck extends App {
     // Body of main loop
     //
     // The settings are reread on each iteration. This makes is possible to edit them on the fly!
-    println("Beginning iteration #: " + iter)
+    logger.info("Beginning iteration #: " + iter)
     val sites: List[String] = options.sections().toList
 
     // Get new links from all sites
     val allNewLinks = sites.flatMap(getNewURLsFromSite)
 
     // Send email if there are new offers
-    println("--------------------------------------")
+    logger.info("--------------------------------------")
     if (allNewLinks.nonEmpty)
     {
-      println("  Found " + allNewLinks.size + " new offers alltogether!")
+      logger.info("Found " + allNewLinks.size + " new offers alltogether!")
       sendMessage(addAddresses,emailSubject,options.get("general","emailfixcontent") + " \n" + allNewLinks.mkString("\n"))
     }
 
@@ -297,7 +313,7 @@ object FlatCheck extends App {
 
     // Check if the max iteration count has been reached
     if (iter > 1) {
-      println("Iteration # " + iter + " finished. Waiting " + waitTime + " minutes for next iteration!")
+      logger.info("Iteration # " + iter + " finished. Waiting " + waitTime + " minutes for next iteration!")
       Thread.sleep((waitTime*60000).toLong)
       mainloop(iter - 1)
     }
