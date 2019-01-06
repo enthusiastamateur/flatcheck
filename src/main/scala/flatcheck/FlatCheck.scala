@@ -13,8 +13,7 @@ import java.util.{Calendar, Scanner}
 
 import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings}
 import org.apache.commons.mail._
-import org.fluentlenium.adapter.{FluentAdapter, FluentStandalone, ThreadLocalFluentControlContainer}
-import org.fluentlenium.core.FluentDriver
+import org.fluentlenium.adapter.FluentStandalone
 import org.fluentlenium.core.domain.{FluentList, FluentWebElement}
 import org.ini4j.ConfigParser
 import org.openqa.selenium.chrome.ChromeDriver
@@ -23,7 +22,7 @@ import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
 import org.openqa.selenium.NoSuchElementException
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.io.Source
 import com.typesafe.scalalogging.LazyLogging
 
@@ -89,7 +88,7 @@ object FlatCheck extends App with LazyLogging {
   try {
     options.read(iniName)
   } catch {
-    case e: Exception =>
+    case _: Exception =>
       val currDir = new File("a").getAbsolutePath.dropRight(1)
       logger.error("Couldn't read ini file: " + currDir + iniName + "\nExiting FlatCheck...")
       System.exit(1)
@@ -110,7 +109,7 @@ object FlatCheck extends App with LazyLogging {
   }
   logger.info("Starting FlatCheck...")
 
-  def sendMessage(to: List[String], subject: String, msg: String) = {
+  def sendMessage(to: List[String], subject: String, msg: String): Unit = {
     val email = new SimpleEmail()
     email.setHostName(options.get("general","hostname"))
     email.setSmtpPort(options.get("general","smtpport").toInt)
@@ -186,7 +185,7 @@ object FlatCheck extends App with LazyLogging {
         val maxScrolls = try {
           options.get(site, "maxscrolls").toInt
         } catch {
-          case e:Exception =>
+          case _:Exception =>
             logger.trace("Could not read number of max scrolls for site " + site + ". Using default value of 0.")
             0
         }
@@ -230,7 +229,7 @@ object FlatCheck extends App with LazyLogging {
           // First try locating using xpath
           Some(driver.findElement(By.xpath(nextPageButtonSelector)))
         } catch {
-          case e: NoSuchElementException =>
+          case _: NoSuchElementException =>
             logger.trace(s"  Element with xpath selector $nextPageButtonSelector could not be found")
             None
         }
@@ -295,7 +294,7 @@ object FlatCheck extends App with LazyLogging {
     //
     // The settings are reread on each iteration. This makes is possible to edit them on the fly!
     logger.info("Beginning iteration #: " + iter)
-    val sites: List[String] = options.sections().toList
+    val sites: List[String] = options.sections().asScala.toList
 
     // Get new links from all sites
     val allNewLinks = sites.flatMap(getNewURLsFromSite)
