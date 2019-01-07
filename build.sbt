@@ -13,7 +13,7 @@ libraryDependencies += "org.fluentlenium" % "fluentlenium-core" % "3.7.0"
 libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0"
 libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.1.2"
 
-libraryDependencies += "org.ini4j" % "ini4j" % "0.5.2"
+libraryDependencies += "org.ini4j" % "ini4j" % "0.5.4"
 
 enablePlugins(JavaAppPackaging)
 enablePlugins(DockerPlugin)

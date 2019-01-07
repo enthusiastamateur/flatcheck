@@ -8,10 +8,11 @@
  */
 package flatcheck
 
-import java.io.{File, FileWriter}
+import java.io.{File, FileInputStream, FileWriter, InputStreamReader}
+import java.nio.charset.StandardCharsets
 import java.util.{Calendar, Scanner}
 
-import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings}
+import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
 import org.apache.commons.mail._
 import org.fluentlenium.adapter.FluentStandalone
 import org.fluentlenium.core.domain.{FluentList, FluentWebElement}
@@ -86,7 +87,8 @@ object FlatCheck extends App with LazyLogging {
   val options = new ConfigParser
   val iniName = "flatcheck.ini"
   try {
-    options.read(iniName)
+    //val is = new InputStreamReader(new FileInputStream(iniName), StandardCharsets.UTF_8)
+    options.read(new FileInputStream(iniName))
   } catch {
     case _: Exception =>
       val currDir = new File("a").getAbsolutePath.dropRight(1)
@@ -156,6 +158,7 @@ object FlatCheck extends App with LazyLogging {
         .headless(true)
         .javascript(true)
         .ssl("trustanything")
+        .userAgent(UserAgent.CHROME)
         .build())
       case _ => new FirefoxDriver()
     }
@@ -225,12 +228,25 @@ object FlatCheck extends App with LazyLogging {
 
         // Try to find the new page button
         val nextPageButtonSelector = options.get(site, "nextpagestring")
+        logger.info(s"The nextpagestring is $nextPageButtonSelector")
         val nextPageButtonOption: Option[WebElement] = try {
-          // First try locating using xpath
-          Some(driver.findElement(By.xpath(nextPageButtonSelector)))
+          val hits = browser.$(nextPageButtonSelector)
+          hits.size() match {
+            case 0 =>
+              logger.trace(s"  Did not find next page button with JQuery selector $nextPageButtonSelector")
+              None
+            case rest =>
+              if (rest > 1) {
+                logger.trace(s"  Found more than one next page buttons with selector:$nextPageButtonSelector. " +
+                  s"Going to use the first button in the list. The hits are: $hits")
+              } else {
+                logger.trace(s"  Found next page button")
+              }
+              Some(hits.first().getElement)
+          }
         } catch {
-          case _: NoSuchElementException =>
-            logger.trace(s"  Element with xpath selector $nextPageButtonSelector could not be found")
+          case e: Exception =>
+            logger.trace(s"  Could not find next page button using JQuery selector: $nextPageButtonSelector. The exception was:\n$e")
             None
         }
 
