@@ -81,18 +81,8 @@ object FlatCheck extends App with LazyLogging {
       logger.error("Couldn't read ini file: " + currDir + iniName + "\nExiting FlatCheck...")
       System.exit(1)
   }
-  // read password
   val address = options.get("general", "address")
-  println("Please enter password for email address " + address + " :")
-  val stdIn = System.console()
-  val passwd: String = if (stdIn == null) {
-    println("Warning! Flatcheck was not able to locate your console, so it will ask for your password using plan text -> your password will be visible when you type it!")
-    val scanner = new Scanner(System.in)
-    scanner.nextLine()
-  }
-  else {
-    String.valueOf(stdIn.readPassword())
-  }
+  val passwd: String = options.get("general", "emailpassword")
   logger.info("Starting FlatCheck...")
 
   def sendMessage(to: List[String], subject: String, msg: String): Unit = {
