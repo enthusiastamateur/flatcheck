@@ -1,6 +1,8 @@
 #ignore the following files and directories
 .idea
+*.sc
 app
 target
 *~
 flatcheck.ini
+flatcheck.bckp

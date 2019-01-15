@@ -14,6 +14,8 @@ libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.1.2"
 
 libraryDependencies += "org.ini4j" % "ini4j" % "0.5.4"
 
+libraryDependencies += "org.xerial" % "sqlite-jdbc" % "3.25.2"
+
 enablePlugins(JavaAppPackaging)
 enablePlugins(DockerPlugin)
 

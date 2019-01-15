@@ -9,8 +9,8 @@
 package flatcheck
 
 import java.io.{File, FileInputStream, FileWriter}
+import java.sql.DriverManager
 import java.util.{Calendar, Scanner}
-
 import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
 import org.apache.commons.mail._
 import org.ini4j.ConfigParser
@@ -18,7 +18,6 @@ import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
-
 import scala.collection.JavaConverters._
 import scala.io.Source
 import com.typesafe.scalalogging.LazyLogging
@@ -135,6 +134,9 @@ object FlatCheck extends App with LazyLogging {
   // Load the boundary on next page clicks, because it can happen that we end up in an infinite loop
   val maxPageClicks = options.get("general", "maxpageclicks").toInt
 
+  // Load the  SQLite database
+  val dbFileName = options.get("general", "sqldb")
+  val conn = DriverManager.getConnection(s"jdbc:sqlite:$dbFileName")
   // Test the credentials
   testCredentials()
   // Start main loop
@@ -199,10 +201,11 @@ object FlatCheck extends App with LazyLogging {
         // Run the CSS query sting to locate the links on the current page
         val linksSelector = options.get(site, "linkselectorxpath")
         val foundLinks = try {
-          driver.findElements(By.cssSelector(linksSelector)).asScala.toList
+          driver.findElements(By.xpath(linksSelector)).asScala.toList
         } catch {
           case e: Exception =>
-            logger.warn(s"  Error locating links on site $site using selector string: $linksSelector. The exception was:\n$e")
+            logger.warn(s"  Error locating links on site $site using XPath selector string: $linksSelector. " +
+              s"The exception was:\n$e")
             return List()
         }
         // Get the number of links found
@@ -224,11 +227,11 @@ object FlatCheck extends App with LazyLogging {
           val hits  = driver.findElements(By.xpath(nextPageButtonSelector)).asScala.toList
           hits.size match {
             case 0 =>
-              logger.trace(s"  Did not find next page button with JQuery selector $nextPageButtonSelector")
+              logger.trace(s"  Did not find next page button with XPath selector $nextPageButtonSelector")
               None
             case rest =>
               if (rest > 1) {
-                logger.trace(s"  Found more than one next page buttons with selector:$nextPageButtonSelector. " +
+                logger.trace(s"  Found more than one next page buttons with XPath selector:$nextPageButtonSelector. " +
                   s"Going to use the first button in the list. The hits are: $hits")
               } else {
                 logger.trace(s"  Found next page button")
@@ -313,6 +316,14 @@ object FlatCheck extends App with LazyLogging {
           logger.info("Found " + allNewLinks.size + " new offers alltogether!")
           sendMessage(addAddresses, emailSubject, options.get("general", "emailfixcontent") + " \n" + allNewLinks.mkString("\n"))
         }
+
+        val thread = new Thread("deep-scraper") {
+          override def run() {
+            Thread.sleep(5000)
+            logger.info(s"Spawning thread for deep link scraping...")
+          }
+        }
+        thread.start()
 
         // Check if the max iteration count has been reached
         if (iter > 1) {
