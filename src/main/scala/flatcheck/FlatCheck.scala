@@ -10,6 +10,7 @@ package flatcheck
 
 import java.io.{File, FileInputStream, FileWriter}
 import java.util.{Calendar, Scanner}
+
 import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
 import org.apache.commons.mail._
 import org.ini4j.ConfigParser
@@ -17,9 +18,12 @@ import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
+
 import scala.collection.JavaConverters._
 import scala.io.Source
 import com.typesafe.scalalogging.LazyLogging
+import javax.mail.AuthenticationFailedException
+
 import scala.util.{Failure, Success, Try}
 
 class DataFile(filename: String) extends LazyLogging {
@@ -69,7 +73,25 @@ class DataFile(filename: String) extends LazyLogging {
 }
 
 object FlatCheck extends App with LazyLogging {
+  def testCredentials(): Unit = {
+    logger.info("Verifying SMTP credentials...")
+    val email = new SimpleEmail()
+    email.setHostName(options.get("general", "hostname"))
+    email.setSmtpPort(options.get("general", "smtpport").toInt)
+    email.setAuthenticator(new DefaultAuthenticator(address, passwd))
+    email.setSSLOnConnect(options.get("general", "sslonconnect").toBoolean)
+    Try(email.getMailSession.getTransport().connect()) match {
+      case Failure(_: AuthenticationFailedException) =>
+        logger.error(s"Authentication has failed, " +
+        s"please check the email address and password in the flatcheck.ini file!")
+        System.exit(1)
+      case Failure(e) => throw e
+      case Success(_) => logger.info("SMTP credentials successfully verified!")
+    }
+  }
+
   // Initalize parser
+  logger.info("Starting FlatCheck...")
   val iniName = "flatcheck.ini"
   val options = new ConfigParser
   try {
@@ -83,7 +105,6 @@ object FlatCheck extends App with LazyLogging {
   }
   val address = options.get("general", "address")
   val passwd: String = options.get("general", "emailpassword")
-  logger.info("Starting FlatCheck...")
 
   def sendMessage(to: List[String], subject: String, msg: String): Unit = {
     val email = new SimpleEmail()
@@ -114,6 +135,8 @@ object FlatCheck extends App with LazyLogging {
   // Load the boundary on next page clicks, because it can happen that we end up in an infinite loop
   val maxPageClicks = options.get("general", "maxpageclicks").toInt
 
+  // Test the credentials
+  testCredentials()
   // Start main loop
   mainloop(maxIter)
 
