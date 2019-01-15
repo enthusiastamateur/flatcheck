@@ -2,7 +2,8 @@
 A small app to help you find your new apartment, written is Scala.  
 
 ## Short description
-This app is designed to rerun a cached query on a regular basis, and monitor if the query has new results since the last run. The motivation behind the program was simple: I was searching for apartments for sale on multiple sites, but none of them had a proper notification system implemented. What I sought was pretty simple though: the user specifies what he/she wants in a detailed search. The site sends a notification to the user if a new deal is available that mathces the user's criteria.
+This app is designed to rerun a cached query on a regular basis, and monitor if the query has new results since the last run.
+The motivation behind the program was simple: I was searching for apartments for sale on multiple sites, but none of them had a proper notification system implemented. What I sought was pretty simple though: the user specifies what he/she wants in a detailed search. The site sends a notification to the user if a new deal is available that mathces the user's criteria.
 This program does precisely that: you set up your query, and the program reruns at a specified rate, and sends you the new results. The found results are saved to disk so that the program will only send a results once, even if it's restarted. To learn about the usage, please refer to this.
 
 ## Building the project
@@ -14,9 +15,13 @@ The program is built using sbt, using the `sbt-native-packager` plugin.
 
 This will create Unix & Windows start scrips under `target\universal\stage\bin`. You can use this version to test locally.
 
-To create a zip file with the startup script and the libraries included, call
+To create a zip file with the startup script and the libraries included, call in the sbt shell
 
 `universal:packageBin`
+
+## Configuration
+
+You'll need to configure the sites being monitored in a `flatcheck.ini` file. A template is provided in the project as `flatcheck.ini`.
 
 ## Disclaimer
 
