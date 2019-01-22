@@ -11,6 +11,7 @@ package flatcheck
 import java.io.{File, FileInputStream, FileWriter}
 import java.sql.DriverManager
 import java.util.{Calendar, Scanner}
+
 import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
 import org.apache.commons.mail._
 import org.ini4j.ConfigParser
@@ -18,9 +19,11 @@ import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
+
 import scala.collection.JavaConverters._
 import scala.io.Source
 import com.typesafe.scalalogging.LazyLogging
+import flatcheck.backup.GDriveBackup
 import javax.mail.AuthenticationFailedException
 
 import scala.util.{Failure, Success, Try}
@@ -91,6 +94,10 @@ object FlatCheck extends App with LazyLogging {
 
   // Initalize parser
   logger.info("Starting FlatCheck...")
+
+  val uploader = new GDriveBackup("E:\\Dokumentumok\\Scala\\flatcheck\\auth\\flatcheck.json")
+  uploader.test()
+
   val iniName = "flatcheck.ini"
   val options = new ConfigParser
   try {

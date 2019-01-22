@@ -1,6 +1,7 @@
 #ignore the following files and directories
 .idea
 *.sc
+auth
 app
 target
 *~
