@@ -30,6 +30,8 @@ javaOptions in Universal ++= Seq(
 
 // Copy the ini next to the executable we'll start
 import com.typesafe.sbt.SbtNativePackager.Universal
-mappings in Universal += {
-  file("flatcheck.ini") -> "bin/flatcheck.ini"
+mappings in Universal ++= {
+    Seq(
+      file("flatcheck.ini") -> "bin/flatcheck.ini",
+      file("auth/flatcheck.json") -> "bin/flatcheck.json")
 }
