@@ -95,10 +95,8 @@ object FlatCheck extends App with LazyLogging {
   // Initalize parser
   logger.info("Starting FlatCheck...")
   val backupper = new GDriveBackup("flatcheck.json")
-  logger.info(s"Running backup of flatcheck.ini")
-  backupper.uploadTextFile("flatcheck.ini")
-  logger.info(s"Running backup of the offers database")
-  backupper.uploadBinaryFile("flatcheck_offers.db")
+  backupper.syncFile("flatcheck.ini", isText = true)
+  backupper.syncFile("flatcheck_offers.db", isText = false)
 
   val iniName = "flatcheck.ini"
   val options = new ConfigParser

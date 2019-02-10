@@ -48,17 +48,31 @@ class GDriveBackup(val credentialsFile: String) extends LazyLogging {
     new AuthorizationCodeInstalledApp(flow, new LocalServerReceiver).authorize("user")
   }
 
+  // Note: the drive API will only be able to list files created by this app!
+  // https://stackoverflow.com/questions/34253889/list-all-files-in-drive
+  @throws[IOException]
+  private def listFiles() : List[File] = {
+    drive.files().list().setPageSize(100)
+      .setFields("nextPageToken, files(id, name)")
+      .execute().getFiles.asScala.toList
+  }
+
   @throws[IOException]
   private def uploadFile(fileName: String, contentType: String) : Unit = {
     val file = new java.io.File(fileName)
     val fileMetadata = new File()
     fileMetadata.setName(file.getName)
     val mediaContent = new FileContent(contentType, file)
-    val insert = drive.files.create(fileMetadata, mediaContent)
-    val uploader = insert.getMediaHttpUploader
+    val request = listFiles().find{ _.getName == fileName}.map{
+      existingFile => drive.files.update(existingFile.getId, fileMetadata, mediaContent)
+    }.getOrElse{
+      logger.info(s"Did not find existing file $fileName in GDrive, creating it...")
+      drive.files.create(fileMetadata, mediaContent)
+    }
+    val uploader = request.getMediaHttpUploader
     uploader.setDirectUploadEnabled(false)
     uploader.setProgressListener(new FileUploadProgressListener())
-    insert.execute
+    request.execute
   }
 
   @throws[IOException]
@@ -75,9 +89,7 @@ class GDriveBackup(val credentialsFile: String) extends LazyLogging {
   def downloadFile(fileName: String): Unit = {
     val outFile = new FileOutputStream(fileName)
     val outStream = new ByteArrayOutputStream()
-    val files = drive.files().list().setPageSize(100)
-      .setFields("nextPageToken, files(id, name)")
-      .execute().getFiles.asScala
+    val files = listFiles()
     val hit = files.find{ file => file.getName == fileName }
     hit match {
       case Some(file) =>
@@ -88,6 +100,21 @@ class GDriveBackup(val credentialsFile: String) extends LazyLogging {
         } finally if (file != null) outFile.close()
       case None =>logger.warn(s"Did not find file with name $fileName, skipping download...")
     }
+  }
 
+  @throws[IOException]
+  def syncFile(fileName: String, isText: Boolean): Unit = {
+    val fileTest = new java.io.File(fileName)
+    if (fileTest.exists()) {
+      logger.info(s"Running backup of $fileName")
+      if (isText) {
+        uploadTextFile(fileName)
+      } else {
+        uploadBinaryFile(fileName)
+      }
+    } else {
+      logger.info(s"Downloading $fileName from GDrive...")
+      downloadFile(fileName)
+    }
   }
 }
