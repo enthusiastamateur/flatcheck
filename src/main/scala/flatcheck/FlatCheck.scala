@@ -94,9 +94,6 @@ object FlatCheck extends App with LazyLogging {
 
   // Initalize parser
   logger.info("Starting FlatCheck...")
-  val backupper = new GDriveBackup("flatcheck.json")
-  backupper.syncFile("flatcheck.ini", isText = true)
-  backupper.syncFile("flatcheck_offers.db", isText = false)
 
   val iniName = "flatcheck.ini"
   val options = new ConfigParser
@@ -140,6 +137,12 @@ object FlatCheck extends App with LazyLogging {
 
   // Load the boundary on next page clicks, because it can happen that we end up in an infinite loop
   val maxPageClicks = options.get("general", "maxpageclicks").toInt
+
+  // Set up the backupper
+  val backupper = new GDriveBackup("flatcheck.json", options.get("general", "syncfreqsec").toInt)
+  backupper.addFile("flatcheck.ini", isText = true)
+  backupper.addFile("flatcheck_offers.db", isText = false)
+  backupper.startSyncer()
 
   // Load the  SQLite database
   val dbFileName = options.get("general", "sqldb")

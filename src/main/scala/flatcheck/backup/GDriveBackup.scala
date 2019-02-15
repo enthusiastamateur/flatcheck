@@ -1,6 +1,7 @@
 package flatcheck.backup
 
 import java.io._
+
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -13,11 +14,19 @@ import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.services.drive.model.File
 import com.google.api.services.drive.{Drive, DriveScopes}
 import java.util.Collections
+
 import com.typesafe.scalalogging.LazyLogging
+
 import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
-
-class GDriveBackup(val credentialsFile: String) extends LazyLogging {
+/**
+  * Class representing an object that periodically uploads the contents of selected files to GDrive
+  * @param credentialsFile
+  * @param syncFreqSec
+  */
+class GDriveBackup(val credentialsFile: String, val syncFreqSec: Int) extends LazyLogging {
   private val APPLICATION_NAME = "flatcheck_cmd"
 
   /** Directory to store user credentials. */
@@ -33,6 +42,10 @@ class GDriveBackup(val credentialsFile: String) extends LazyLogging {
 
   /** Global Drive API client. */
   private val drive : Drive = new Drive.Builder(httpTransport, JSON_FACTORY, authorize).setApplicationName(APPLICATION_NAME).build
+
+  private val syncFiles : mutable.ListBuffer[(String, Boolean)] =  new mutable.ListBuffer[(String, Boolean)]
+
+  private var backupThread : Thread = _
 
   /** Authorizes the installed application to access user's protected data. */
   @throws[Exception]
@@ -116,5 +129,25 @@ class GDriveBackup(val credentialsFile: String) extends LazyLogging {
       logger.info(s"Downloading $fileName from GDrive...")
       downloadFile(fileName)
     }
+  }
+
+  def addFile(fileName: String, isText: Boolean): Unit = {
+    val x : (String, Boolean) = (fileName, isText)
+    syncFiles += x
+  }
+
+  def startSyncer(): Unit = {
+    backupThread = new Thread("gdrive-backupper") {
+      override def run() {
+        logger.info(s"Starting backup process, will backup files every ${syncFreqSec/60} minutes...")
+        while (true) {
+          syncFiles.foreach{ case (filename, isText) =>
+            syncFile(filename, isText)
+          }
+          Thread.sleep(1000*syncFreqSec)
+        }
+      }
+    }
+    backupThread.start()
   }
 }
