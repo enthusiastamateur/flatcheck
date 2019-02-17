@@ -16,6 +16,11 @@ libraryDependencies += "org.ini4j" % "ini4j" % "0.5.4"
 
 libraryDependencies += "org.xerial" % "sqlite-jdbc" % "3.25.2"
 
+libraryDependencies += "com.google.api-client" % "google-api-client" % "1.28.0"
+libraryDependencies += "com.google.apis" % "google-api-services-drive" % "v3-rev136-1.25.0"
+libraryDependencies += "com.google.oauth-client" % "google-oauth-client-jetty" % "1.28.0"
+
+
 enablePlugins(JavaAppPackaging)
 enablePlugins(DockerPlugin)
 
@@ -25,6 +30,8 @@ javaOptions in Universal ++= Seq(
 
 // Copy the ini next to the executable we'll start
 import com.typesafe.sbt.SbtNativePackager.Universal
-mappings in Universal += {
-  file("flatcheck.ini") -> "bin/flatcheck.ini"
+mappings in Universal ++= {
+    Seq(
+      file("flatcheck.ini") -> "bin/flatcheck.ini",
+      file("auth/flatcheck.json") -> "bin/flatcheck.json")
 }

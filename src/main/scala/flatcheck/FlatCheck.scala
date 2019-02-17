@@ -9,8 +9,9 @@
 package flatcheck
 
 import java.io.{File, FileInputStream, FileWriter}
-import java.sql.DriverManager
+import java.sql.{DriverManager, SQLException}
 import java.util.{Calendar, Scanner}
+
 import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
 import org.apache.commons.mail._
 import org.ini4j.ConfigParser
@@ -18,9 +19,11 @@ import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
+
 import scala.collection.JavaConverters._
 import scala.io.Source
 import com.typesafe.scalalogging.LazyLogging
+import flatcheck.backup.GDriveBackup
 import javax.mail.AuthenticationFailedException
 
 import scala.util.{Failure, Success, Try}
@@ -91,6 +94,7 @@ object FlatCheck extends App with LazyLogging {
 
   // Initalize parser
   logger.info("Starting FlatCheck...")
+
   val iniName = "flatcheck.ini"
   val options = new ConfigParser
   try {
@@ -133,6 +137,12 @@ object FlatCheck extends App with LazyLogging {
 
   // Load the boundary on next page clicks, because it can happen that we end up in an infinite loop
   val maxPageClicks = options.get("general", "maxpageclicks").toInt
+
+  // Set up the backupper
+  val backupper = new GDriveBackup("flatcheck.json", options.get("general", "syncfreqsec").toInt)
+  backupper.addFile("flatcheck.ini", isText = true)
+  backupper.addFile("flatcheck_offers.db", isText = false)
+  backupper.startSyncer()
 
   // Load the  SQLite database
   val dbFileName = options.get("general", "sqldb")
@@ -365,6 +375,41 @@ object FlatCheck extends App with LazyLogging {
           logger.info("Iteration # " + iter + " finished")
           mainloop(iter - 1)
         }
+      case "sql" =>
+        logger.info("Entered interactive SQL interpreter mode")
+        val scanner = new Scanner(System.in)
+        var line: String = null
+        while ( {
+          System.out.print("[SQL] > ")
+          line = scanner.nextLine()
+          line != "exit"
+        }) {
+          val res = Try({
+            val stmt = conn.createStatement()
+            val rs = stmt.executeQuery(line)
+            val rsmd = rs.getMetaData
+            val columnsNumber = rsmd.getColumnCount
+            val range = 1 to columnsNumber
+            System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~RESULTS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            range.foreach{ i =>
+              if (i == 1) System.out.print("| ")
+              System.out.print(rsmd.getColumnName(i) + " | ")
+            }
+            System.out.println("\n---------------------------------------------------------------------")
+            while (rs.next()) {
+              range.foreach{ i =>
+                if (i == 1) System.out.print("| ")
+                System.out.print(rs.getString(i) + " | ")
+              }
+              System.out.print("\n")
+            }
+            System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+          })
+          res.recover{
+            case e: SQLException => System.out.println(s"SQL execution error: ${e.getMessage}")
+          }
+        }
+        System.exit(0)
       case rest => throw new IllegalArgumentException(s"Unknown operation mode: $rest")
     }
   }
