@@ -8,9 +8,13 @@
   */
 package flatcheck
 
-import java.io.{File, FileInputStream, FileWriter}
-import java.sql.{DriverManager, SQLException}
-import java.util.{Calendar, Scanner}
+import java.io.{File, FileInputStream}
+import java.sql.{SQLException, Timestamp}
+import java.time.Instant
+
+import slick.jdbc.SQLiteProfile.api._
+import db._
+import java.util.Scanner
 
 import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
 import org.apache.commons.mail._
@@ -21,58 +25,12 @@ import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
 
 import scala.collection.JavaConverters._
-import scala.io.Source
 import com.typesafe.scalalogging.LazyLogging
 import flatcheck.backup.GDriveBackup
+import flatcheck.utils.Utils
 import javax.mail.AuthenticationFailedException
 
 import scala.util.{Failure, Success, Try}
-
-class DataFile(filename: String) extends LazyLogging {
-
-  // Append to end
-  def appendFlat(link: String, emailSent: Boolean): Unit = {
-    val file = new File(filename)
-    if (!file.exists()) // write fejlec
-    {
-      logger.trace(s"    Creating new DataFile with name $filename")
-      file.createNewFile()
-      val writer = new FileWriter(file)
-      writer.write("Timestamp\tID\tLink\tEmail sent")
-      writer.flush()
-      writer.close()
-    }
-    // Append to the end of file
-    val appender = new FileWriter(filename, true)
-    logger.trace(s"    Appending link: $link")
-    appender.write("\n" + Calendar.getInstance.getTime.toString + "\t" + link + "\t" + emailSent.toString)
-    appender.flush()
-    appender.close()
-  }
-
-  // Read all lines
-  def readFlats: List[List[String]] = {
-    val file = new File(filename)
-    if (file.exists()) {
-      val contents = for (
-        line <- Source.fromFile(filename).getLines.toList
-        if !line.isEmpty // skip empty  lines
-      ) yield {
-        line.split("\t").toList
-      }
-      if (contents.isEmpty) {
-        logger.info(s"    No previously checked links found in file $filename")
-        List()
-      } else {
-        logger.trace(s"    Loaded ${contents.tail.size} entries from $filename")
-        contents.tail
-      } // The head is the fejlec
-    } else {
-      logger.info(s"    No checked links file found at $filename")
-      List()
-    }
-  }
-}
 
 object FlatCheck extends App with LazyLogging {
   def testCredentials(): Unit = {
@@ -138,15 +96,43 @@ object FlatCheck extends App with LazyLogging {
   // Load the boundary on next page clicks, because it can happen that we end up in an infinite loop
   val maxPageClicks = options.get("general", "maxpageclicks").toInt
 
+  // Load the  SQLite database
+  val db = Database.forConfig("flatcheck_offers")
+  val offersDS : OffersDS = new OffersSQLiteDataSource(db)
+  // Create connection for the interactive mode
+  val conn = db.source.createConnection()
+  /*
+  val offers = TableQuery[Offers]
+  try {
+    logger.info("Create if not exists")
+    val setup = DBIO.seq(
+      offers.schema.createIfNotExists
+    )
+    val setupFuture = db.run(setup)
+    Await.result(setupFuture, Duration(4, "min"))
+    logger.info("Print original entries")
+    val q1 = for(m <- offers) yield m
+    val printFuture = db.stream(q1.result).foreach(println)
+    Await.result(printFuture, Duration(4, "min"))
+    logger.info("Insert new row")
+    val insert = DBIO.seq(
+      offers += (0, "testsite", "https://test.io/offer", Timestamp.from(Instant.now()))
+    )
+    val insertFuture = db.run(insert)
+    Await.result(insertFuture, Duration(4, "min"))
+    logger.info("Print new rows")
+    val q2 = for(m <- offers) yield m
+    val printFuture2 = db.stream(q2.result).foreach(println)
+    Await.result(printFuture2, Duration(4, "min"))
+  } finally db.close
+  */
+
   // Set up the backupper
   val backupper = new GDriveBackup("flatcheck.json", options.get("general", "syncfreqsec").toInt)
   backupper.addFile("flatcheck.ini", isText = true)
   backupper.addFile("flatcheck_offers.db", isText = false)
-  backupper.startSyncer()
+  backupper.startBackupper()
 
-  // Load the  SQLite database
-  val dbFileName = options.get("general", "sqldb")
-  val conn = DriverManager.getConnection(s"jdbc:sqlite:$dbFileName")
   // Test the credentials
   testCredentials()
   // Start main loop
@@ -183,7 +169,7 @@ object FlatCheck extends App with LazyLogging {
       /*
        * Nested function to iterate through all found pages
        */
-      def iterateThroughPages(checkedAlreadyLinks: List[String], linksAcc: List[String], clickCount: Int): List[String] = {
+      def iterateThroughPages(offersDS: OffersDS, linksAcc: List[String], previousLinkTexts: List[String], clickCount: Int): List[String] = {
         // First scroll down to the bottom of the page.
         // Some pages load their contents dynamically, so scroll as much as needed
         val jse = driver.asInstanceOf[JavascriptExecutor]
@@ -207,8 +193,11 @@ object FlatCheck extends App with LazyLogging {
           count = count + 1
         }
 
+        // Set the __cfRLUnblockHandlers variable to true - this is required on cloudflare enabled sites, in case
+        // the javascript could not complete successfully
+        jse.executeScript("window.__cfRLUnblockHandlers = 1;")
 
-        // Run the CSS query sting to locate the links on the current page
+        // Run the xpath query sting to locate the links on the current page
         val linksSelector = options.get(site, "linkselectorxpath")
         val foundLinks = try {
           driver.findElements(By.xpath(linksSelector)).asScala.toList
@@ -218,18 +207,25 @@ object FlatCheck extends App with LazyLogging {
               s"The exception was:\n$e")
             return List()
         }
+        logger.trace(s"  Details of the found links:")
+        foundLinks.foreach{ we =>
+          logger.trace("  " + Utils.getWebElementDetails(we).mkString(","))
+        }
+
         // Get the number of links found
         val foundLinksSize = foundLinks.size
-        logger.info("  Located " + foundLinksSize + " offer links on current page!")
-
-        // Get new links on the current page
-        val newLinksOnPage: List[String] = {
-          for {
-            elem <- foundLinks
-            link = elem.getAttribute("href").split('?').head
-            if !checkedAlreadyLinks.contains(link)
-          } yield link
+        // Check if we are getting different results as before
+        val foundLinkTexts = foundLinks.map{_.getAttribute("href").split('?').head}
+        if (foundLinkTexts == previousLinkTexts) {
+          logger.warn(s"Found links are exactly the same as in the last step! Probably moving on to the next page did not work...")
         }
+        // Get new links on the current page
+        val newLinksOnPage: List[String] = foundLinkTexts.filter{ link => !offersDS.containsOfferWithLink(link) }
+        // Save new results to DB
+        if (newLinksOnPage.nonEmpty) {
+          newLinksOnPage.foreach(link => offersDS.addOffer((0,site, link, Timestamp.from(Instant.now()))))
+        }
+        logger.info("  Located " + foundLinksSize + s" offer links on current page, out of which ${newLinksOnPage.size} was new!")
 
         // Try to find the new page button
         val nextPageButtonSelector = options.get(site, "nextbuttonselectorxpath")
@@ -260,9 +256,10 @@ object FlatCheck extends App with LazyLogging {
             // Click on the new page button, and wait 5 seconds for everything to load, if we have not exhausted all the clicks
             if (nextPageButton.isEnabled && clickCount < maxPageClicks) {
               logger.info(s"  Clicking on next page button with text '${nextPageButton.getText}'...")
+              logger.trace(s"  Details of the nextPageButton:\n${Utils.getWebElementDetails(nextPageButton).mkString("\n")}")
               nextPageButton.click()
-              Thread.sleep(5000.toLong)
-              iterateThroughPages(checkedAlreadyLinks, linksAcc ++ newLinksOnPage, clickCount + 1)
+              Thread.sleep(5000)
+              iterateThroughPages(offersDS, linksAcc ++ newLinksOnPage, foundLinkTexts, clickCount + 1)
             } else {
               linksAcc ++ newLinksOnPage
             }
@@ -276,7 +273,6 @@ object FlatCheck extends App with LazyLogging {
       {
         logger.info("  --------------------------------------")
         logger.info("  Site: " + site)
-        val filename = options.get(site, "datafile")
         val baseUrl = options.get(site, "baseurl")
         try {
           driver.get(baseUrl)
@@ -285,16 +281,12 @@ object FlatCheck extends App with LazyLogging {
             logger.warn(s"Error loading site using URL: $baseUrl, skipping it in this iteration. The exception was:\n$e")
             return List()
         }
-        val checkedAlready: List[List[String]] = new DataFile(filename).readFlats
-        val checkedAlreadyLinks: List[String] = checkedAlready map { list => list(1) }
 
         // Iterate through all pages
-        val newLinks = iterateThroughPages(checkedAlreadyLinks, List(), 0)
+        val newLinks = iterateThroughPages(offersDS, List(), List(), 0)
 
         // Update the datafiles
         if (newLinks.nonEmpty) {
-          val dataFile = new DataFile(filename)
-          newLinks.foreach(link => dataFile.appendFlat(link, emailSent = true))
           logger.info("  Found " + newLinks.size + " new offers!")
         }
         else {

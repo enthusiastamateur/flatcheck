@@ -136,13 +136,17 @@ class GDriveBackup(val credentialsFile: String, val syncFreqSec: Int) extends La
     syncFiles += x
   }
 
-  def startSyncer(): Unit = {
+  def startBackupper(): Unit = {
     backupThread = new Thread("gdrive-backupper") {
       override def run() {
         logger.info(s"Starting backup process, will backup files every ${syncFreqSec/60} minutes...")
         while (true) {
-          syncFiles.foreach{ case (filename, isText) =>
-            syncFile(filename, isText)
+          syncFiles.foreach{ case (fileName, isText) =>
+            if (isText) {
+              uploadTextFile(fileName)
+            } else {
+              uploadBinaryFile(fileName)
+            }
           }
           Thread.sleep(1000*syncFreqSec)
         }

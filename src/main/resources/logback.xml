@@ -5,8 +5,7 @@
         </encoder>
     </appender>
 
-    <logger name="flatcheck.DataFile" level="TRACE"/>
-    <logger name="flatcheck.FlatCheck" level="TRACE"/>
+    <logger name="flatcheck.FlatCheck" level="DEBUG"/>
 
     <root level="info">
         <appender-ref ref="STDOUT" />

@@ -20,6 +20,7 @@ libraryDependencies += "com.google.api-client" % "google-api-client" % "1.28.0"
 libraryDependencies += "com.google.apis" % "google-api-services-drive" % "v3-rev136-1.25.0"
 libraryDependencies += "com.google.oauth-client" % "google-oauth-client-jetty" % "1.28.0"
 
+libraryDependencies += "com.typesafe.slick" %% "slick" % "3.3.0"
 
 enablePlugins(JavaAppPackaging)
 enablePlugins(DockerPlugin)
