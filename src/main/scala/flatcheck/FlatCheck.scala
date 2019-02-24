@@ -27,6 +27,7 @@ import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
 import scala.collection.JavaConverters._
 import com.typesafe.scalalogging.LazyLogging
 import flatcheck.backup.GDriveBackup
+import flatcheck.scraper.DeepScraper
 import flatcheck.utils.Utils
 import javax.mail.AuthenticationFailedException
 
@@ -165,11 +166,11 @@ object FlatCheck extends App with LazyLogging {
     /*
      *  Nested function for getting new urls and saving them
      */
-    def getNewURLsFromSite(site: String): List[String] = {
+    def getNewURLsFromSite(site: String): List[(Long, String)] = {
       /*
        * Nested function to iterate through all found pages
        */
-      def iterateThroughPages(offersDS: OffersDS, linksAcc: List[String], previousLinkTexts: List[String], clickCount: Int): List[String] = {
+      def iterateThroughPages(offersDS: OffersDS, linksAcc: List[(Long, String)], previousLinkTexts: List[String], clickCount: Int): List[(Long, String)] = {
         // First scroll down to the bottom of the page.
         // Some pages load their contents dynamically, so scroll as much as needed
         val jse = driver.asInstanceOf[JavascriptExecutor]
@@ -220,11 +221,14 @@ object FlatCheck extends App with LazyLogging {
           logger.warn(s"Found links are exactly the same as in the last step! Probably moving on to the next page did not work...")
         }
         // Get new links on the current page
-        val newLinksOnPage: List[String] = foundLinkTexts.filter{ link => !offersDS.containsOfferWithLink(link) }
         // Save new results to DB
-        if (newLinksOnPage.nonEmpty) {
-          newLinksOnPage.foreach(link => offersDS.addOffer((0,site, link, Timestamp.from(Instant.now()))))
+        val now = Timestamp.from(Instant.now())
+        val newLinksOnPage: List[(Long, String)] = foundLinkTexts.filter{ link =>
+          offersDS.getOfferIdByLink(link).isEmpty
+        }.map{ link =>
+          (offersDS.addOffer((0, site, link, now, now)), link)
         }
+
         logger.info("  Located " + foundLinksSize + s" offer links on current page, out of which ${newLinksOnPage.size} was new!")
 
         // Try to find the new page button
@@ -310,22 +314,17 @@ object FlatCheck extends App with LazyLogging {
     val mode = options.get("general", "mode").toLowerCase
     mode match {
       case "prod" | "production" =>
-        val allNewLinks = sites.flatMap(getNewURLsFromSite)
+        val allNewLinks : List[(Long, String)] = sites.flatMap(getNewURLsFromSite)
 
         // Send email if there are new offers
         logger.info("--------------------------------------")
         if (allNewLinks.nonEmpty) {
           logger.info("Found " + allNewLinks.size + " new offers alltogether!")
-          sendMessage(addAddresses, emailSubject, options.get("general", "emailfixcontent") + " \n" + allNewLinks.mkString("\n"))
+          sendMessage(addAddresses, emailSubject, options.get("general", "emailfixcontent") + " \n" + allNewLinks.map{_._2}.mkString("\n"))
         }
 
-        val thread = new Thread("deep-scraper") {
-          override def run() {
-            Thread.sleep(5000)
-            logger.info(s"Spawning thread for deep link scraping...")
-          }
-        }
-        thread.start()
+        val deepScraper = new DeepScraper("deep-scraper")
+        deepScraper.start()
 
         // Check if the max iteration count has been reached
         if (iter > 1) {
