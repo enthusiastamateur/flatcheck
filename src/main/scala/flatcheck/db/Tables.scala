@@ -5,6 +5,7 @@ import java.sql.Timestamp
 
 object Types {
   type Offer = (Long, String, String, Timestamp, Timestamp)
+  type OfferShortId = (Long, String, String)
   type OfferDetail = (Long,
     Int,
     Int,

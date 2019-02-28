@@ -41,7 +41,7 @@ class OffersSQLiteDataSource(val db: Database, val timeOutMins: Long = 5) extend
 
   override def getOfferIdByLink(offerLink: String): Option[Long] = {
     val filterQuery: Query[Offers, Offer, Seq] = offers.filter(_.link === offerLink)
-    val res : Seq[Offer] = Await.result(db.run(filterQuery.result), Duration(timeOutMins, "min"))
+    val res : List[Offer] = Await.result(db.run(filterQuery.result), Duration(timeOutMins, "min")).toList
     logger.debug(s"Found offers with link $offerLink:\n${res.map{_.toString()}.mkString("\n")}")
     res match {
       case Nil => None

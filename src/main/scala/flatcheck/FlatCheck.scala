@@ -11,26 +11,25 @@ package flatcheck
 import java.io.{File, FileInputStream}
 import java.sql.{SQLException, Timestamp}
 import java.time.Instant
-
 import slick.jdbc.SQLiteProfile.api._
 import db._
 import java.util.Scanner
-
 import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
 import org.apache.commons.mail._
-import org.ini4j.ConfigParser
+import flatcheck.config.FlatcheckConfig
 import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
-
 import scala.collection.JavaConverters._
 import com.typesafe.scalalogging.LazyLogging
 import flatcheck.backup.GDriveBackup
+import flatcheck.db.Types.OfferShortId
 import flatcheck.scraper.DeepScraper
 import flatcheck.utils.Utils
 import javax.mail.AuthenticationFailedException
-
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 object FlatCheck extends App with LazyLogging {
@@ -51,11 +50,28 @@ object FlatCheck extends App with LazyLogging {
     }
   }
 
+  def createWebDriver(): WebDriver = {
+    options.get("general", "browser").toLowerCase match {
+      case "ie" | "internetexplorer" | "explorer" => new InternetExplorerDriver()
+      case "chrome" => new ChromeDriver()
+      case "firefox" => new FirefoxDriver()
+      case "jbrowser" => new JBrowserDriver(Settings.builder()
+        .blockAds(true)
+        .headless(true)
+        .javascript(true)
+        .logJavascript(true)
+        .ssl("trustanything")
+        .userAgent(UserAgent.CHROME)
+        .build())
+      case rest => throw new IllegalArgumentException(s"Unknown driver: $rest")
+    }
+  }
+
   // Initalize parser
   logger.info("Starting FlatCheck...")
 
   val iniName = "flatcheck.ini"
-  val options = new ConfigParser
+  val options = new FlatcheckConfig
   try {
     //val is = new InputStreamReader(new FileInputStream(iniName), StandardCharsets.UTF_8)
     options.read(new FileInputStream(iniName))
@@ -102,31 +118,6 @@ object FlatCheck extends App with LazyLogging {
   val offersDS : OffersDS = new OffersSQLiteDataSource(db)
   // Create connection for the interactive mode
   val conn = db.source.createConnection()
-  /*
-  val offers = TableQuery[Offers]
-  try {
-    logger.info("Create if not exists")
-    val setup = DBIO.seq(
-      offers.schema.createIfNotExists
-    )
-    val setupFuture = db.run(setup)
-    Await.result(setupFuture, Duration(4, "min"))
-    logger.info("Print original entries")
-    val q1 = for(m <- offers) yield m
-    val printFuture = db.stream(q1.result).foreach(println)
-    Await.result(printFuture, Duration(4, "min"))
-    logger.info("Insert new row")
-    val insert = DBIO.seq(
-      offers += (0, "testsite", "https://test.io/offer", Timestamp.from(Instant.now()))
-    )
-    val insertFuture = db.run(insert)
-    Await.result(insertFuture, Duration(4, "min"))
-    logger.info("Print new rows")
-    val q2 = for(m <- offers) yield m
-    val printFuture2 = db.stream(q2.result).foreach(println)
-    Await.result(printFuture2, Duration(4, "min"))
-  } finally db.close
-  */
 
   // Set up the backupper
   val backupper = new GDriveBackup("flatcheck.json", options.get("general", "syncfreqsec").toInt)
@@ -136,6 +127,8 @@ object FlatCheck extends App with LazyLogging {
 
   // Test the credentials
   testCredentials()
+  // Initialize the future
+  var processedDeepScrapes : Future[Int] = Future{0}
   // Start main loop
   mainloop(maxIter)
 
@@ -145,20 +138,8 @@ object FlatCheck extends App with LazyLogging {
   def mainloop(iter: Int): Unit = {
     // -------------------------------------------------
     // Initalizing main loop
-    val driver: WebDriver = options.get("general", "browser").toLowerCase match {
-      case "ie" | "internetexplorer" | "explorer" => new InternetExplorerDriver()
-      case "chrome" => new ChromeDriver()
-      case "firefox" => new FirefoxDriver()
-      case "jbrowser" => new JBrowserDriver(Settings.builder()
-        .blockAds(true)
-        .headless(true)
-        .javascript(true)
-        .logJavascript(true)
-        .ssl("trustanything")
-        .userAgent(UserAgent.CHROME)
-        .build())
-      case rest => throw new IllegalArgumentException(s"Unknown driver: $rest")
-    }
+    val driver: WebDriver = createWebDriver()
+    val deepScraperDriver = createWebDriver()
     // End of main loop initalization
     // -------------------------------------------------
 
@@ -166,11 +147,11 @@ object FlatCheck extends App with LazyLogging {
     /*
      *  Nested function for getting new urls and saving them
      */
-    def getNewURLsFromSite(site: String): List[(Long, String)] = {
+    def getNewURLsFromSite(site: String): List[OfferShortId] = {
       /*
        * Nested function to iterate through all found pages
        */
-      def iterateThroughPages(offersDS: OffersDS, linksAcc: List[(Long, String)], previousLinkTexts: List[String], clickCount: Int): List[(Long, String)] = {
+      def iterateThroughPages(offersDS: OffersDS, linksAcc: List[OfferShortId], previousLinkTexts: List[String], clickCount: Int): List[OfferShortId] = {
         // First scroll down to the bottom of the page.
         // Some pages load their contents dynamically, so scroll as much as needed
         val jse = driver.asInstanceOf[JavascriptExecutor]
@@ -223,10 +204,10 @@ object FlatCheck extends App with LazyLogging {
         // Get new links on the current page
         // Save new results to DB
         val now = Timestamp.from(Instant.now())
-        val newLinksOnPage: List[(Long, String)] = foundLinkTexts.filter{ link =>
+        val newLinksOnPage: List[OfferShortId] = foundLinkTexts.filter{ link =>
           offersDS.getOfferIdByLink(link).isEmpty
         }.map{ link =>
-          (offersDS.addOffer((0, site, link, now, now)), link)
+          (offersDS.addOffer((0, site, link, now, now)), site, link)
         }
 
         logger.info("  Located " + foundLinksSize + s" offer links on current page, out of which ${newLinksOnPage.size} was new!")
@@ -314,7 +295,7 @@ object FlatCheck extends App with LazyLogging {
     val mode = options.get("general", "mode").toLowerCase
     mode match {
       case "prod" | "production" =>
-        val allNewLinks : List[(Long, String)] = sites.flatMap(getNewURLsFromSite)
+        val allNewLinks : List[OfferShortId] = sites.flatMap(getNewURLsFromSite)
 
         // Send email if there are new offers
         logger.info("--------------------------------------")
@@ -323,8 +304,16 @@ object FlatCheck extends App with LazyLogging {
           sendMessage(addAddresses, emailSubject, options.get("general", "emailfixcontent") + " \n" + allNewLinks.map{_._2}.mkString("\n"))
         }
 
-        val deepScraper = new DeepScraper("deep-scraper")
-        deepScraper.start()
+        // Start deepscraper with the links and ids, plus the mapping
+        val deepScraper = new DeepScraper(deepScraperDriver, options, offersDS)
+        // Add the new links to the deepscraper's queue
+        deepScraper.addTargets(allNewLinks)
+        // Check if it's viable to start the deep scraping
+        if (processedDeepScrapes.isCompleted) {
+          processedDeepScrapes = deepScraper.scrapeNext()
+        } else {
+          logger.info(s"Deep scraper is still running, waiting until next iteration")
+        }
 
         // Check if the max iteration count has been reached
         if (iter > 1) {
