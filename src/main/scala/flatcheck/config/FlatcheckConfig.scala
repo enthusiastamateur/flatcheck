@@ -8,7 +8,8 @@ import slick.lifted.TableQuery
 class FlatcheckConfig extends ConfigParser {
   val offerDetails = TableQuery[OfferDetails]
 
-  def getOption(section: String, option: String) : Option[String] = Try(get(section, option)).toOption
+  // ConfigParser turns all section and option to lowercase!
+  def getOption(section: String, option: String) : Option[String] = Try(get(section.toLowerCase(), option.toLowerCase())).toOption
 
   def safeGet(section: String, option: String) : String = getOption(section, option).getOrElse("")
 

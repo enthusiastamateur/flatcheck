@@ -6,6 +6,9 @@
     </appender>
 
     <logger name="flatcheck.FlatCheck" level="DEBUG"/>
+    <logger name="flatcheck.db.OffersSQLiteDataSource" level="DEBUG"/>
+    <logger name="flatcheck.scraper.SimpleTextScraper" level="DEBUG"/>
+    <logger name="flatcheck.scraper.DeepScraper" level="DEBUG"/>
 
     <root level="info">
         <appender-ref ref="STDOUT" />

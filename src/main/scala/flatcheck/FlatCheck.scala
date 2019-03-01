@@ -129,6 +129,12 @@ object FlatCheck extends App with LazyLogging {
   testCredentials()
   // Initialize the future
   var processedDeepScrapes : Future[Int] = Future{0}
+  val scraperBatchSize = options.safeGet("general","scraperBatchSize").toInt
+  val scraperSleepTime = options.safeGet("general","scraperSleepTime").toInt
+  // Start deepscraper with the links and ids, plus the mapping
+  val deepScraperDriver = createWebDriver()
+  val driver: WebDriver = createWebDriver()
+  val deepScraper = new DeepScraper(deepScraperDriver, options, offersDS, scraperBatchSize, scraperSleepTime * 1000)
   // Start main loop
   mainloop(maxIter)
 
@@ -137,9 +143,8 @@ object FlatCheck extends App with LazyLogging {
    */
   def mainloop(iter: Int): Unit = {
     // -------------------------------------------------
-    // Initalizing main loop
-    val driver: WebDriver = createWebDriver()
-    val deepScraperDriver = createWebDriver()
+
+
     // End of main loop initalization
     // -------------------------------------------------
 
@@ -301,11 +306,9 @@ object FlatCheck extends App with LazyLogging {
         logger.info("--------------------------------------")
         if (allNewLinks.nonEmpty) {
           logger.info("Found " + allNewLinks.size + " new offers alltogether!")
-          sendMessage(addAddresses, emailSubject, options.get("general", "emailfixcontent") + " \n" + allNewLinks.map{_._2}.mkString("\n"))
+          sendMessage(addAddresses, emailSubject, options.get("general", "emailfixcontent") + " \n" + allNewLinks.map{_._3}.mkString("\n"))
         }
 
-        // Start deepscraper with the links and ids, plus the mapping
-        val deepScraper = new DeepScraper(deepScraperDriver, options, offersDS)
         // Add the new links to the deepscraper's queue
         deepScraper.addTargets(allNewLinks)
         // Check if it's viable to start the deep scraping

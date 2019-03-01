@@ -11,6 +11,7 @@ import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
+import scala.util.matching.Regex
 
 class DeepScraper(val driver: WebDriver,
                   val config: FlatcheckConfig,
@@ -21,9 +22,27 @@ class DeepScraper(val driver: WebDriver,
   val scraper = new SimpleTextScraper(driver, sleepTime)
   val offerDetails = TableQuery[OfferDetails]
   var targets : mutable.Queue[OfferShortId] = mutable.Queue()
+  val patternMHUF: Regex = "([ 0-9]*)(M FT)".r
+  val patternHUF: Regex = "([ 0-9]*)(FT)".r
+  val patternNM: Regex = "([ 0-9]*)(M2)".r
 
   def addTargets(tgts: List[OfferShortId]): Unit = {
     targets ++= tgts
+  }
+
+  def convertPrice(prcStr: String): Int = {
+    prcStr.replace(" ", "").replace(",",".").toUpperCase() match {
+      case patternHUF(value, _) => value.toInt
+      case patternMHUF(value, _) => value.toInt * 1000000
+      case _ => -1
+    }
+  }
+
+  def convertNM(nmStr: String): Int = {
+    nmStr.replace(" ", "").toUpperCase() match {
+      case patternNM(value, _) => value.toInt
+      case _ => -1
+    }
   }
 
   def scrapeSitePage(site: String, link: String, id: Long) : OfferDetail = {
@@ -32,10 +51,10 @@ class DeepScraper(val driver: WebDriver,
 
     val colNames : IndexedSeq[String] = offerDetails.baseTableRow.create_*.map(_.name).toIndexedSeq
     (
-      0L,
-      resMap.get(colNames(1)).flatten.flatMap{x => Try(x.split(" ").head.toInt).toOption}.getOrElse(-1),
-      resMap.get(colNames(2)).flatten.flatMap{x => Try(x.split(" ").head.toInt).toOption}.getOrElse(-1),
-      resMap.get(colNames(3)).flatten.flatMap{x => Try(x.split(" ").head.toInt).toOption}.getOrElse(-1),
+      id,
+      convertPrice(resMap.get(colNames(1)).flatten.getOrElse("")),
+      convertNM(resMap.get(colNames(2)).flatten.getOrElse("")),
+      resMap.get(colNames(3)).flatten.flatMap{x => Try(x.split(' ').head.toInt).toOption}.getOrElse(-1),
       resMap.get(colNames(4)).flatten.getOrElse(""),
       resMap.get(colNames(5)).flatten.getOrElse(""),
       resMap.get(colNames(6)).flatten.getOrElse(""),

@@ -23,7 +23,7 @@ class OffersSQLiteDataSource(val db: Database, val timeOutMins: Long = 5) extend
   val offers = TableQuery[Offers]
   val offerDetails = TableQuery[OfferDetails]
 
-  logger.debug("Initializing offers table if needed...")
+  logger.trace("Initializing offers table if needed...")
   Await.result(db.run(DBIO.seq(offers.schema.createIfNotExists)), Duration(timeOutMins, "min"))
   Await.result(db.run(DBIO.seq(offerDetails.schema.createIfNotExists)), Duration(timeOutMins, "min"))
 
@@ -42,7 +42,7 @@ class OffersSQLiteDataSource(val db: Database, val timeOutMins: Long = 5) extend
   override def getOfferIdByLink(offerLink: String): Option[Long] = {
     val filterQuery: Query[Offers, Offer, Seq] = offers.filter(_.link === offerLink)
     val res : List[Offer] = Await.result(db.run(filterQuery.result), Duration(timeOutMins, "min")).toList
-    logger.debug(s"Found offers with link $offerLink:\n${res.map{_.toString()}.mkString("\n")}")
+    logger.trace(s"Found offers with link $offerLink:\n${res.map{_.toString()}.mkString("\n")}")
     res match {
       case Nil => None
       case record :: Nil => Some(record._1)
@@ -55,7 +55,7 @@ class OffersSQLiteDataSource(val db: Database, val timeOutMins: Long = 5) extend
   override def addOffer(offer: Offer): Long = {
     val insert = offers returning offers.map(_.offerId) += offer
     val res = Await.result(db.run(insert), Duration(timeOutMins, "min"))
-    logger.debug(s"Successfully inserted offer: ${offer.toString()}")
+    logger.trace(s"Successfully inserted offer: ${offer.toString()}, it's id is $res")
     res
   }
 
