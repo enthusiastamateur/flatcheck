@@ -8,8 +8,8 @@ object Types {
   type OfferShortId = (Long, String, String)
   type OfferDetail = (Long,
     Int,
-    Int,
-    Int,
+    String,
+    String,
     String,
     String,
     String,
@@ -21,8 +21,8 @@ object Types {
     Timestamp,
     Timestamp,
     Int,
-    Int,
-    Int,
+    String,
+    String,
     String,
     String,
     String,
@@ -47,8 +47,8 @@ class OfferDetails(tag: Tag) extends Table[Types.OfferDetail](tag, "OfferDetails
     onUpdate=ForeignKeyAction.Restrict,
     onDelete=ForeignKeyAction.Cascade)
   def priceHUF = column[Int]("priceHUF")
-  def sizeSM = column[Int]("sizeSM")
-  def roomsNum = column[Int]("roomsNum")
+  def sizeSM = column[String]("sizeSM")
+  def roomsNum = column[String]("roomsNum")
   def address = column[String]("address", O.Length(256))
   def area = column[String]("area", O.Length(128))
   def description = column[String]("description", O.Length(2048))

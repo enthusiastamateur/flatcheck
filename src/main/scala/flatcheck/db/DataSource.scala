@@ -68,7 +68,9 @@ class OffersSQLiteDataSource(val db: Database, val timeOutMins: Long = 5) extend
       } else {
         val insert = offerDetails += offerDetail
         Await.result(db.run(insert), Duration(timeOutMins, "min"))
-        logger.debug(s"Successfully inserted offerDetail: $offerDetail...")
+        logger.debug(s"Successfully inserted offerDetails " +
+          s"(${offerDetail._1},${offerDetail._2},${offerDetail._3},${offerDetail._4},${offerDetail._5}," +
+          s"${offerDetail._6},${offerDetail._7},${offerDetail._8},${offerDetail._9.take(20)}...)")
       }
       true
     } else {
