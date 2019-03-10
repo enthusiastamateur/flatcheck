@@ -26,7 +26,9 @@ enablePlugins(JavaAppPackaging)
 enablePlugins(DockerPlugin)
 
 javaOptions in Universal ++= Seq(
-  "-Dfile.encoding=UTF8"
+  "-Dfile.encoding=UTF8",
+  "-Xms512m",
+  "-Xmx1024m"
 )
 
 // Copy the ini next to the executable we'll start
