@@ -1,3 +1,6 @@
+// Copy the ini next to the executable we'll start
+import com.typesafe.sbt.SbtNativePackager.Universal
+
 scalaVersion := "2.12.8"
 
 name := "FlatCheck"
@@ -27,12 +30,10 @@ enablePlugins(DockerPlugin)
 
 javaOptions in Universal ++= Seq(
   "-Dfile.encoding=UTF8",
-  "-Xms512m",
-  "-Xmx1024m"
+  "-J-Xms512m",
+  "-J-Xmx1024m"
 )
 
-// Copy the ini next to the executable we'll start
-import com.typesafe.sbt.SbtNativePackager.Universal
 mappings in Universal ++= {
     Seq(
       file("flatcheck.ini") -> "bin/flatcheck.ini",

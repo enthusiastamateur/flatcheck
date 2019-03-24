@@ -16,6 +16,7 @@ trait OffersDS {
   def addOfferDetail(offerDetail: OfferDetail): Boolean
   def updateOfferLastSeen(id: Long, lastSeen: Timestamp) : Boolean
   def getOfferWithDetails(id: Long): Option[OfferWithDetails]
+  def getOffersWithoutDetails: List[Offer]
 }
 
 
@@ -114,6 +115,24 @@ class OffersSQLiteDataSource(val db: Database, val timeOutMins: Long = 5) extend
       case record :: _ =>
         logger.warn(s"Found multiple records with offerId $id. Returning first result.")
         Some(record)
+    }
+  }
+
+  override def getOffersWithoutDetails: List[Offer] = {
+    val withoutDetailsQuery = for {
+      (offer, offerDetails) <-  offers.joinLeft(offerDetails).on(_.offerId === _.offerId).filter{ case(o, od) => !od.isDefined}
+    } yield (offer.offerId,
+      offer.site,
+      offer.link,
+      offer.firstSeen,
+      offer.lastSeen)
+    Await.result(db.run(withoutDetailsQuery.result), Duration(timeOutMins, "min")) match {
+      case Nil =>
+        logger.debug(s"Well done, all records have their offer details scraped!")
+        Nil
+      case some =>
+        logger.debug(s"Found ${some.size} records which do not have their details scraped!")
+        some.toList
     }
   }
 }

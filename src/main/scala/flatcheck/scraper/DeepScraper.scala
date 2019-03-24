@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import flatcheck.config.FlatcheckConfig
 import flatcheck.db.{OfferDetails, OffersDS}
 import flatcheck.db.Types.{OfferDetail, OfferShortId}
-import flatcheck.utils.WebDriverFactory
+import flatcheck.utils.{Mailer, WebDriverFactory}
 import slick.lifted.TableQuery
 
 import scala.collection.mutable
@@ -28,6 +28,7 @@ class DeepScraper(val driverFactory: WebDriverFactory,
   val patternMHUF: Regex = "([ 0-9]*)(M FT)".r
   val patternHUF: Regex = "([ 0-9]*)(FT)".r
   val patternNM: Regex = "([ 0-9]*)(M2)".r
+  val mailer = new Mailer(config)
 
   def addTargets(tgts: List[OfferShortId]): Unit = {
     targets ++= tgts
@@ -58,7 +59,7 @@ class DeepScraper(val driverFactory: WebDriverFactory,
       val colNames: IndexedSeq[String] = offerDetails.baseTableRow.create_*.map(_.name).toIndexedSeq
       (
         id,
-        convertPrice(resMap.get(colNames(1)).flatten.getOrElse("")),
+        resMap.get(colNames(1)).flatten.getOrElse(""),
         resMap.get(colNames(2)).flatten.getOrElse(""),
         resMap.get(colNames(3)).flatten.getOrElse(""),
         resMap.get(colNames(4)).flatten.getOrElse(""),
@@ -82,17 +83,22 @@ class DeepScraper(val driverFactory: WebDriverFactory,
 
   def scrapeNext() : Future[Unit] = Future{
     if (targets.isEmpty) {
-      logger.info(s"No links to process in the queue, waiting ${repeatTime / 60000} minutes until next scrape ...")
-      Thread.sleep(repeatTime)
+      logger.info(s"No links to process in the queue!")
     } else {
       val items = (0 until batchSize).flatMap { _ => if (targets.nonEmpty) Some(targets.dequeue()) else None }.toList
-      items.foreach { case (id, site, link) =>
+      val newScrapedOffers: List[(String, String, OfferDetail)] = items.flatMap { case (id, site, link) =>
         logger.info(s"Starting deep-scrape of offer with id $id, link $link")
         scrapeSitePage(site, link, id, 0) match {
-          case Success(offerDetail) => Try(ds.addOfferDetail(offerDetail))
-          case Failure(e) => logger.error(s"Could not scrape site: $site, link: $link, the exception was: ${e.getMessage}")
+          case Success(offerDetail) =>
+            Try(ds.addOfferDetail(offerDetail))
+            Some(site, link, offerDetail)
+          case Failure(e) =>
+            logger.error(s"Could not scrape site: $site, link: $link, the exception was: ${e.getMessage}")
+            None
         }
       }
+      // Send notification email
+      mailer.sendOfferNotification(newScrapedOffers)
       logger.info(s"Finished with the current run, processed ${items.size} links. Remaining in the queue: ${targets.size}")
     }
   }
@@ -100,15 +106,15 @@ class DeepScraper(val driverFactory: WebDriverFactory,
   override def run(): Unit = {
     logger.info(s"Started thread")
     var processedDeepScrapes: Future[Unit] = Future()
+    // Give the system time to evaluate the empty future
+    Thread.sleep(1000)
     while (true) {
-      // Make sure we don't kill the CPU
-      Thread.sleep(1000)
       if (processedDeepScrapes.isCompleted) {
           processedDeepScrapes = scrapeNext()
       } else {
         logger.info(s"Deep scraper is still running, waiting ${repeatTime / 60000} minutes until next scrape ...")
-        Thread.sleep(repeatTime)
       }
+      Thread.sleep(repeatTime)
     }
   }
 }

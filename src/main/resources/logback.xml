@@ -4,13 +4,56 @@
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
+    <appender name="SCRAPER" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>scraper-log.txt</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- daily rollover -->
+            <fileNamePattern>scraper-log-%d{yyyy-MM-dd}.txt</fileNamePattern>
+            <!-- keep 20 days' worth of history -->
+            <maxHistory>20</maxHistory>
+        </rollingPolicy>
+        <append>true</append>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <appender name="DB" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>database-log.txt</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- daily rollover -->
+            <fileNamePattern>database-log-%d{yyyy-MM-dd}.txt</fileNamePattern>
+            <!-- keep 20 days' worth of history -->
+            <maxHistory>20</maxHistory>
+        </rollingPolicy>
+        <append>true</append>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
 
-    <logger name="flatcheck.FlatCheck" level="DEBUG"/>
-    <logger name="flatcheck.db.OffersSQLiteDataSource" level="DEBUG"/>
-    <logger name="flatcheck.scraper.SimpleTextScraper" level="DEBUG"/>
-    <logger name="flatcheck.scraper.DeepScraper" level="DEBUG"/>
+    <logger name="flatcheck.FlatCheck" level="DEBUG" additivity="false">
+        <appender-ref ref="STDOUT" />
+    </logger>
+    <logger name="flatcheck.utils.Mailer" level="DEBUG" additivity="false">
+        <appender-ref ref="STDOUT" />
+    </logger>
+
+    <logger name="flatcheck.db.OffersSQLiteDataSource" level="DEBUG" additivity="false">
+        <appender-ref ref="DB" />
+    </logger>
+
+    <logger name="flatcheck.scraper.SimpleTextScraper" level="DEBUG" additivity="false">
+        <appender-ref ref="SCRAPER" />
+    </logger>
+    <logger name="flatcheck.scraper.DeepScraper" level="DEBUG" additivity="false">
+        <appender-ref ref="SCRAPER" />
+    </logger>
 
     <root level="info">
         <appender-ref ref="STDOUT" />
+    </root>
+    <root level="error">
+        <appender-ref ref="SCRAPER" />
+        <appender-ref ref="DB" />
     </root>
 </configuration>

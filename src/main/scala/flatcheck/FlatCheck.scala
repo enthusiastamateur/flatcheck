@@ -15,7 +15,6 @@ import slick.jdbc.SQLiteProfile.api._
 import db._
 import java.util.Scanner
 import flatcheck.utils.WebDriverFactory
-import org.apache.commons.mail._
 import flatcheck.config.FlatcheckConfig
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
 import scala.collection.JavaConverters._
@@ -24,30 +23,12 @@ import flatcheck.backup.GDriveBackup
 import flatcheck.db.Types.OfferShortId
 import flatcheck.scraper.DeepScraper
 import flatcheck.utils.Utils
-import javax.mail.AuthenticationFailedException
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 object FlatCheck extends App with LazyLogging {
-  def testCredentials(): Unit = {
-    logger.info("Verifying SMTP credentials...")
-    val email = new SimpleEmail()
-    email.setHostName(options.get("general", "hostname"))
-    email.setSmtpPort(options.get("general", "smtpport").toInt)
-    email.setAuthenticator(new DefaultAuthenticator(address, passwd))
-    email.setSSLOnConnect(options.get("general", "sslonconnect").toBoolean)
-    Try(email.getMailSession.getTransport().connect()) match {
-      case Failure(_: AuthenticationFailedException) =>
-        logger.error(s"Authentication has failed, " +
-        s"please check the email address and password in the flatcheck.ini file!")
-        System.exit(1)
-      case Failure(e) => throw e
-      case Success(_) => logger.info("SMTP credentials successfully verified!")
-    }
-  }
-
   // Initalize parser
   logger.info("Starting FlatCheck...")
 
@@ -62,31 +43,7 @@ object FlatCheck extends App with LazyLogging {
       logger.error("Couldn't read ini file: " + currDir + iniName + "\nExiting FlatCheck...")
       System.exit(1)
   }
-  val address = options.get("general", "address")
-  val passwd: String = options.get("general", "emailpassword")
 
-  def sendMessage(to: List[String], subject: String, msg: String): Unit = {
-    val email = new SimpleEmail()
-    email.setHostName(options.get("general", "hostname"))
-    email.setSmtpPort(options.get("general", "smtpport").toInt)
-    email.setAuthenticator(new DefaultAuthenticator(address, passwd))
-    email.setSSLOnConnect(options.get("general", "sslonconnect").toBoolean)
-    email.setFrom(address)
-    email.setSubject(subject)
-    to.foreach(address => email.addTo(address))
-    email.setMsg(msg)
-    email.send()
-    logger.info("  Email sent to: " + to + "!")
-  }
-
-  // Email setup
-  val emailSubject: String = options.get("general", "emailsubject")
-  if (emailSubject.isEmpty) println("Email subject is not recognised, so emails will be sent without a subject!")
-  val addAddresses: List[String] = options.get("general", "sendto").split(",").toList
-  if (addAddresses.isEmpty) {
-    logger.error("Sendto email addresses are not recognised! Update the ini file and restart the application! Exiting...")
-    System.exit(1)
-  }
   // Initalize the main loop
   val maxIter = options.get("general", "exitafter").toInt
   val waitTime = options.get("general", "refreshtime").toDouble
@@ -109,13 +66,18 @@ object FlatCheck extends App with LazyLogging {
   // Create the webdriver factory
   val webDriverFactory = new WebDriverFactory(options)
 
-  // Test the credentials
-  testCredentials()
   // Initialize the future
   var processedDeepScrapes : Future[Int] = Future{0}
   val scraperBatchSize = options.safeGet("general","scraperBatchSize").toInt
   val scraperSleepTime = options.safeGet("general","scraperSleepTime").toInt
   val deepScraper = new DeepScraper(webDriverFactory, options, offersDS, scraperBatchSize, scraperSleepTime * 1000)
+  // Check if there are offers without offerdetails => these we have to start scraping
+  val offersWithoutDetails = offersDS.getOffersWithoutDetails
+  if (offersWithoutDetails.nonEmpty) {
+    // Add the new links to the deepscraper's queue
+    deepScraper.addTargets(offersWithoutDetails.map{ case (id, site, link, _, _) => (id, site, link)} )
+    logger.debug(s"Added ${offersWithoutDetails.size} offers to the initial DeepScraper queue")
+  }
   deepScraper.start()
   // Start main loop
   mainloop(1)
@@ -189,9 +151,14 @@ object FlatCheck extends App with LazyLogging {
           // Get new links on the current page
           // Save new results to DB
           val now = Timestamp.from(Instant.now())
-          val newLinksOnPage: List[OfferShortId] = foundLinkTexts.filter { link =>
-            offersDS.getOfferIdByLink(link).isEmpty
-          }.map { link =>
+          val linksWithIdOpts = foundLinkTexts.map{ link =>
+            (link, offersDS.getOfferIdByLink(link))
+          }
+          // For the already seen links, let's update the last seen time
+          linksWithIdOpts.foreach{ case (_, idOpt) =>
+            idOpt.foreach{ id => offersDS.updateOfferLastSeen(id, now) }
+          }
+          val newLinksOnPage  = linksWithIdOpts.collect{ case (link, idOpt) if idOpt.isEmpty =>
             (offersDS.addOffer((0, site, link, now, now)), site, link)
           }
 
@@ -285,13 +252,6 @@ object FlatCheck extends App with LazyLogging {
     mode match {
       case "prod" | "production" =>
         val allNewLinks : List[OfferShortId] = sites.flatMap(getNewURLsFromSite)
-
-        // Send email if there are new offers
-        logger.info("--------------------------------------")
-        if (allNewLinks.nonEmpty) {
-          logger.info("Found " + allNewLinks.size + " new offers alltogether!")
-          sendMessage(addAddresses, emailSubject, options.get("general", "emailfixcontent") + " \n" + allNewLinks.map{_._3}.mkString("\n"))
-        }
 
         // Add the new links to the deepscraper's queue
         deepScraper.addTargets(allNewLinks)
