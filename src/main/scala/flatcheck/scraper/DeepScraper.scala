@@ -6,7 +6,6 @@ import flatcheck.db.{OfferDetails, OffersDS}
 import flatcheck.db.Types.{OfferDetail, OfferShortId}
 import flatcheck.utils.{Mailer, WebDriverFactory}
 import slick.lifted.TableQuery
-
 import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -53,20 +52,20 @@ class DeepScraper(val driverFactory: WebDriverFactory,
   def scrapeSitePage(site: String, link: String, id: Long, retry: Int) : Try[OfferDetail] = {
     Try {
       val scraperConfig = config.getDeepScraperConfig(site)
-      val scraper = new SimpleTextScraper(driverFactory.createWebDriver(), sleepTime)
+      val scraper = new SimpleTextScraper(driverFactory, sleepTime)
       val resMap = scraper.scrapePage(link, scraperConfig)
 
       val colNames: IndexedSeq[String] = offerDetails.baseTableRow.create_*.map(_.name).toIndexedSeq
       (
         id,
-        resMap.get(colNames(1)).flatten.getOrElse(""),
-        resMap.get(colNames(2)).flatten.getOrElse(""),
-        resMap.get(colNames(3)).flatten.getOrElse(""),
-        resMap.get(colNames(4)).flatten.getOrElse(""),
-        resMap.get(colNames(5)).flatten.getOrElse(""),
-        resMap.get(colNames(6)).flatten.getOrElse(""),
-        resMap.get(colNames(7)).flatten.getOrElse(""),
-        resMap.get(colNames(8)).flatten.getOrElse("")
+        resMap.get(colNames(1)).flatten.getOrElse("").trim(),
+        resMap.get(colNames(2)).flatten.getOrElse("").trim(),
+        resMap.get(colNames(3)).flatten.getOrElse("").trim(),
+        resMap.get(colNames(4)).flatten.getOrElse("").trim(),
+        resMap.get(colNames(5)).flatten.getOrElse("").trim(),
+        resMap.get(colNames(6)).flatten.getOrElse("").trim(),
+        resMap.get(colNames(7)).flatten.getOrElse("").trim(),
+        resMap.get(colNames(8)).flatten.getOrElse("").trim()
       )
     } match {
       case Success(value) => Success(value)
@@ -89,9 +88,7 @@ class DeepScraper(val driverFactory: WebDriverFactory,
       val newScrapedOffers: List[(String, String, OfferDetail)] = items.flatMap { case (id, site, link) =>
         logger.info(s"Starting deep-scrape of offer with id $id, link $link")
         scrapeSitePage(site, link, id, 0) match {
-          case Success(offerDetail) =>
-            Try(ds.addOfferDetail(offerDetail))
-            Some(site, link, offerDetail)
+          case Success(offerDetail) => Some(site, link, offerDetail)
           case Failure(e) =>
             logger.error(s"Could not scrape site: $site, link: $link, the exception was: ${e.getMessage}")
             None
@@ -99,6 +96,13 @@ class DeepScraper(val driverFactory: WebDriverFactory,
       }
       // Send notification email
       mailer.sendOfferNotification(newScrapedOffers)
+      // Now persist the data
+      newScrapedOffers.foreach{ case (site, link, offerDetail) =>
+        Try(ds.addOfferDetail(offerDetail)) match {
+          case Failure(exception) => logger.warn(s"Could not add offerDetail $offerDetail to database, the exception was: ${exception.getMessage}")
+          case _ =>
+        }
+      }
       logger.info(s"Finished with the current run, processed ${items.size} links. Remaining in the queue: ${targets.size}")
     }
   }

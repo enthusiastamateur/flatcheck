@@ -27,10 +27,13 @@ import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
+import java.lang.management.ManagementFactory
 
 object FlatCheck extends App with LazyLogging {
   // Initalize parser
   logger.info("Starting FlatCheck...")
+  val arguments : List[String] = ManagementFactory.getRuntimeMXBean.getInputArguments.asScala.toList
+  logger.info(s"The startup arguments were: ${arguments.mkString(",")}")
 
   val iniName = "flatcheck.ini"
   val options = new FlatcheckConfig
@@ -58,9 +61,9 @@ object FlatCheck extends App with LazyLogging {
   val conn = db.source.createConnection()
 
   // Set up the backupper
-  val backupper = new GDriveBackup("flatcheck.json", options.get("general", "syncfreqsec").toInt)
+  val backupper = new GDriveBackup("flatcheck.json", options.get("general", "syncfreqsec").toInt, conn)
   backupper.addFile("flatcheck.ini", isText = true)
-  backupper.addFile("flatcheck_offers.db", isText = false)
+  //backupper.addFile("flatcheck_offers.db", isText = false)
   backupper.startBackupper()
 
   // Create the webdriver factory
@@ -77,6 +80,8 @@ object FlatCheck extends App with LazyLogging {
     // Add the new links to the deepscraper's queue
     deepScraper.addTargets(offersWithoutDetails.map{ case (id, site, link, _, _) => (id, site, link)} )
     logger.debug(s"Added ${offersWithoutDetails.size} offers to the initial DeepScraper queue")
+  } else {
+    logger.debug(s"All sites have their details scraped!")
   }
   deepScraper.start()
   // Start main loop
@@ -87,7 +92,6 @@ object FlatCheck extends App with LazyLogging {
    */
   @tailrec
   def mainloop(iter: Int): Unit = {
-    val driver: WebDriver = webDriverFactory.createWebDriver()
     /*
      *  Nested function for getting new urls and saving them
      */
@@ -95,7 +99,7 @@ object FlatCheck extends App with LazyLogging {
       /*
        * Nested function to iterate through all found pages
        */
-      def iterateThroughPages(offersDS: OffersDS, linksAcc: List[OfferShortId], previousLinkTexts: List[String], clickCount: Int): List[OfferShortId] = {
+      def iterateThroughPages(driver: WebDriver, offersDS: OffersDS, linksAcc: List[OfferShortId], previousLinkTexts: List[String], clickCount: Int): List[OfferShortId] = {
         Try {
           // First scroll down to the bottom of the page.
           // Some pages load their contents dynamically, so scroll as much as needed
@@ -196,7 +200,7 @@ object FlatCheck extends App with LazyLogging {
                 logger.trace(s"  Details of the nextPageButton:\n${Utils.getWebElementDetails(nextPageButton).mkString("\n")}")
                 nextPageButton.click()
                 Thread.sleep(5000)
-                iterateThroughPages(offersDS, linksAcc ++ newLinksOnPage, foundLinkTexts, clickCount + 1)
+                iterateThroughPages(driver, offersDS, linksAcc ++ newLinksOnPage, foundLinkTexts, clickCount + 1)
               } else {
                 linksAcc ++ newLinksOnPage
               }
@@ -212,6 +216,7 @@ object FlatCheck extends App with LazyLogging {
       // Body of getNewURLsFromSite
       if (site == "general") List() else // The "general" tag does not correspond to a site
       {
+        val driver: WebDriver = webDriverFactory.createWebDriver()
         logger.info("  --------------------------------------")
         logger.info("  Site: " + site)
         val baseUrl = options.get(site, "baseurl")
@@ -224,7 +229,8 @@ object FlatCheck extends App with LazyLogging {
         }
 
         // Iterate through all pages
-        val newLinks = iterateThroughPages(offersDS, List(), List(), 0)
+        val newLinks = iterateThroughPages(driver, offersDS, List(), List(), 0)
+        driver.quit()
 
         // Update the datafiles
         if (newLinks.nonEmpty) {
@@ -266,6 +272,7 @@ object FlatCheck extends App with LazyLogging {
           if (site != "general") {
             val baseUrl = options.get(site, "baseurl")
             logger.info(s"Visiting site $site at $baseUrl")
+            val driver: WebDriver = webDriverFactory.createWebDriver()
             driver.get(baseUrl)
             var line: String = null
             while ( {
@@ -286,6 +293,7 @@ object FlatCheck extends App with LazyLogging {
                   logger.info(s"Encountered exception: $exception")
               }
             }
+            driver.quit()
             logger.info(s"Moving to next page...")
           }
         }
@@ -328,6 +336,7 @@ object FlatCheck extends App with LazyLogging {
 
       case rest => throw new IllegalArgumentException(s"Unknown operation mode: $rest")
     }
+
     logger.info("Iteration # " + iter + " finished")
     mainloop(iter + 1)
   }

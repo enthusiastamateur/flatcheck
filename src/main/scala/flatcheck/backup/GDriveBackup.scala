@@ -1,6 +1,7 @@
 package flatcheck.backup
 
 import java.io._
+import java.sql.Connection
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
@@ -26,7 +27,7 @@ import scala.collection.mutable.ListBuffer
   * @param credentialsFile
   * @param syncFreqSec
   */
-class GDriveBackup(val credentialsFile: String, val syncFreqSec: Int) extends LazyLogging {
+class GDriveBackup(val credentialsFile: String, val syncFreqSec: Int, val conn: Connection) extends LazyLogging {
   private val APPLICATION_NAME = "flatcheck_cmd"
 
   /** Directory to store user credentials. */
@@ -140,7 +141,15 @@ class GDriveBackup(val credentialsFile: String, val syncFreqSec: Int) extends La
     backupThread = new Thread("gdrive-backupper") {
       override def run() {
         logger.info(s"Starting backup process, will backup files every ${syncFreqSec/60} minutes...")
+        // Create new backup
+        val tmpFile = new java.io.File("flatcheck_offers.db.bckp")
+        addFile(tmpFile.getName, false)
         while (true) {
+          // Create a new snapshot in each iteration, and upload the snapshot
+          val stmt = conn.createStatement()
+          stmt.executeUpdate("backup to " + tmpFile.getAbsolutePath)
+          stmt.close()
+
           syncFiles.foreach{ case (fileName, isText) =>
             if (isText) {
               uploadTextFile(fileName)

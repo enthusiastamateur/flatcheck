@@ -30,8 +30,9 @@ enablePlugins(DockerPlugin)
 
 javaOptions in Universal ++= Seq(
   "-Dfile.encoding=UTF8",
-  "-J-Xms512m",
-  "-J-Xmx1024m"
+  "-Xmx700m",
+  "-XX:+UseG1GC",
+  "-XX:+AggressiveOpts"
 )
 
 mappings in Universal ++= {

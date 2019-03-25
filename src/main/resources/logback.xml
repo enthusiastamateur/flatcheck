@@ -37,6 +37,9 @@
     <logger name="flatcheck.utils.Mailer" level="DEBUG" additivity="false">
         <appender-ref ref="STDOUT" />
     </logger>
+    <logger name="flatcheck.backup" level="DEBUG" additivity="false">
+        <appender-ref ref="STDOUT" />
+    </logger>
 
     <logger name="flatcheck.db.OffersSQLiteDataSource" level="DEBUG" additivity="false">
         <appender-ref ref="DB" />
