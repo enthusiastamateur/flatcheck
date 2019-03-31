@@ -59,37 +59,59 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
   }
 
   def sendOfferNotification(offers: List[(String, String, OfferDetail)]): Unit = {
-    val linksHtml = offers.map{ case (site, link, (offerId, priceHUF, sizeSM, roomsNum, address, area, description, floor, flatCondition)) =>
+    val linksHtml = offers.zipWithIndex.map{ case ((site, link, (offerId, priceHUF, sizeSM, roomsNum, address, area, description, floor, flatCondition)), idx) =>
+      if (idx % 2 == 0) {
         s"""
            |<tr>
-           |<td><a style="color: #126cbb;" href="$link" target="_blank" rel="noopener">$site</a></td>
-           |<td>$priceHUF</td>
-           |<td>$sizeSM</td>
-           |<td>$area</td>
-           |<td>$roomsNum</td>
-           |<td>$address</td>
-           |<td>$flatCondition</td>
+           |  <td class="tg-0lax"><a style="color: #126cbb;" href="$link" target="_blank" rel="noopener">$site</a></td>
+           |  <td class="tg-0lax">$priceHUF</td>
+           |  <td class="tg-lqy6">$sizeSM</td>
+           |  <td class="tg-lqy6">$area</td>
+           |  <td class="tg-lqy6">$roomsNum</td>
+           |  <td class="tg-lqy6">$address</td>
+           |  <td class="tg-lqy6">$flatCondition</td>
            |</tr>
          """.stripMargin
+      } else {
+        s"""
+           |<tr>
+           |  <td class="tg-hmp3"><a style="color: #126cbb;" href="$link" target="_blank" rel="noopener">$site</a></td>
+           |  <td class="tg-hmp3">$priceHUF</td>
+           |  <td class="tg-mb3i">$sizeSM</td>
+           |  <td class="tg-mb3i">$area</td>
+           |  <td class="tg-mb3i">$roomsNum</td>
+           |  <td class="tg-mb3i">$address</td>
+           |  <td class="tg-mb3i">$flatCondition</td>
+           |</tr>
+         """.stripMargin
+      }
     }
     val body =
       s"""
-         |<h2 style="text-align: center;">Flatcheck info</h2>
-         |<table style="border-color: #000607;" border="1">
-         |<tbody>
-         |<tr>
-         |<td style="background: #1a54ba none repeat;">Site</td>
-         |<td style="background: #1a54ba none repeat;">Price</td>
-         |<td style="background: #1a54ba none repeat;">m^2</td>
-         |<td style="background: #1a54ba none repeat;">Number of rooms</td>
-         |<td style="background: #1a54ba none repeat;">Area</td>
-         |<td style="background: #1a54ba none repeat;">Address</td>
-         |<td style="background: #1a54ba none repeat;">Condition</td>
-         |</tr>
-         ${linksHtml.mkString("\n")}
-         |</tbody>
-         |</table>
-       """.stripMargin
+        |<head>
+        |<style type="text/css">
+        |.tg  {border-collapse:collapse;border-spacing:0;border-color:#999;}
+        |.tg td{font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#999;color:#444;background-color:#F7FDFA;}
+        |.tg th{font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#999;color:#fff;background-color:#26ADE4;}
+        |.tg .tg-hmp3{background-color:#D2E4FC;text-align:left;vertical-align:top}
+        |.tg .tg-mb3i{background-color:#D2E4FC;text-align:right;vertical-align:top}
+        |.tg .tg-lqy6{text-align:right;vertical-align:top}
+        |.tg .tg-ddb2{font-family:serif !important;;text-align:center;vertical-align:top}
+        |.tg .tg-0lax{text-align:left;vertical-align:top}
+        |</style>
+        |</head>
+        |<body>
+        |<table class="tg">
+        |    <thead>
+        |        <tr>
+        |            <th class="tg-ddb2 " colspan="7" style="width: 99.6737%;"><br><span style="font-size: 24px;">Flatcheck notification</span></th>
+        |        </tr>
+        |    </thead>
+        |    <tbody>
+        ${linksHtml.mkString("\n")}
+        |    </tbody>
+        |</body>
+      """.stripMargin
     sendMessage(body)
   }
 
