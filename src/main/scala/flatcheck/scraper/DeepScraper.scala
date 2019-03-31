@@ -11,27 +11,36 @@ import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
 import scala.util.matching.Regex
+import scala.collection.JavaConverters._
 
 case object TooManyRetries extends Exception("Too many retries")
 
 class DeepScraper(val driverFactory: WebDriverFactory,
                   val config: FlatcheckConfig,
                   val ds : OffersDS,
-                  val batchSize : Int = 10,
+                  val batchSize : Int = 30,
                   val sleepTime : Int = 5000,
                   val repeatTime: Int = 60000,
                   val maxRetries: Int = 3) extends Thread("ScrapeTimer") with LazyLogging {
 
   val offerDetails = TableQuery[OfferDetails]
-  var targets : mutable.Queue[OfferShortId] = mutable.Queue()
+  // Change to Map[String, Queue[OfferShortId]
+  var targets : mutable.Map[String, mutable.Queue[OfferShortId]] = mutable.Map()
   val patternMHUF: Regex = "([ 0-9]*)(M FT)".r
   val patternHUF: Regex = "([ 0-9]*)(FT)".r
   val patternNM: Regex = "([ 0-9]*)(M2)".r
   val mailer = new Mailer(config)
 
   def addTargets(tgts: List[OfferShortId]): Unit = {
-    targets ++= tgts
+    tgts.foreach{ tgt =>
+      val site = tgt._2
+      if (!targets.isDefinedAt(site)) {
+        targets(site) = mutable.Queue[OfferShortId]()
+      }
+      targets(site) += tgt
+    }
     logger.info(s"Added ${tgts.size} new offers to scrape")
+    logger.info(s"The new targets map is: $targets")
   }
 
   def convertPrice(prcStr: String): Int = {
@@ -84,26 +93,43 @@ class DeepScraper(val driverFactory: WebDriverFactory,
     if (targets.isEmpty) {
       logger.info(s"No links to process in the queue!")
     } else {
-      val items = (0 until batchSize).flatMap { _ => if (targets.nonEmpty) Some(targets.dequeue()) else None }.toList
-      val newScrapedOffers: List[(String, String, OfferDetail)] = items.flatMap { case (id, site, link) =>
-        logger.info(s"Starting deep-scrape of offer with id $id, link $link")
-        scrapeSitePage(site, link, id, 0) match {
-          case Success(offerDetail) => Some(site, link, offerDetail)
-          case Failure(e) =>
-            logger.error(s"Could not scrape site: $site, link: $link, the exception was: ${e.getMessage}")
-            None
+      // Process the the links in groups by site, because each group can have different recipients
+      val sites: List[String] = config.sections().asScala.toList
+      sites.filter{ _ != "general"}.foreach { parseSite =>
+        val siteQueue = targets.getOrElse(parseSite, mutable.Queue[OfferShortId]())
+        val items = (0 until batchSize).flatMap { _ => if (siteQueue.nonEmpty) {
+          Some(siteQueue.dequeue())
+        } else None }.toList
+        logger.info(s"Found ${items.size} new offers from site $parseSite")
+        val newScrapedOffers: List[(String, String, OfferDetail)] = items.flatMap { case (id, site, link) =>
+          logger.info(s"Starting deep-scrape of offer with id $id, link $link")
+          scrapeSitePage(site, link, id, 0) match {
+            case Success(offerDetail) => Some(site, link, offerDetail)
+            case Failure(e) =>
+              logger.error(s"Could not scrape site: $site, link: $link, the exception was: ${e.getMessage}")
+              None
+          }
         }
-      }
-      // Send notification email
-      mailer.sendOfferNotification(newScrapedOffers)
-      // Now persist the data
-      newScrapedOffers.foreach{ case (site, link, offerDetail) =>
-        Try(ds.addOfferDetail(offerDetail)) match {
-          case Failure(exception) => logger.warn(s"Could not add offerDetail $offerDetail to database, the exception was: ${exception.getMessage}")
-          case _ =>
+        // Send notification email
+        val sendTo = config.get(parseSite, "sendto").split(",").toList
+        if (newScrapedOffers.nonEmpty) {
+          if (sendTo.nonEmpty) {
+            mailer.sendOfferNotification(newScrapedOffers, sendTo)
+          } else {
+            logger.info(s"No recipients marked for site $parseSite, will not send any emails")
+          }
+        } else {
+          logger.info(s"No new hits for site $parseSite")
         }
+        // Now persist the data
+        newScrapedOffers.foreach { case (site, link, offerDetail) =>
+          Try(ds.addOfferDetail(offerDetail)) match {
+            case Failure(exception) => logger.warn(s"Could not add offerDetail $offerDetail to database, the exception was: ${exception.getMessage}")
+            case _ =>
+          }
+        }
+        logger.info(s"Finished with the current scrape run for site $parseSite, items remaining in the queue: ${targets.getOrElse(parseSite, mutable.Queue[OfferShortId]()).size}")
       }
-      logger.info(s"Finished with the current run, processed ${items.size} links. Remaining in the queue: ${targets.size}")
     }
   }
 

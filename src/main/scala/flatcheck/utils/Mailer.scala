@@ -9,11 +9,6 @@ import org.apache.commons.mail.{DefaultAuthenticator, HtmlEmail, SimpleEmail}
 import scala.util.{Failure, Success, Try}
 
 class Mailer(val options: FlatcheckConfig) extends LazyLogging {
-  val toAddresses: List[String] = options.get("general", "sendto").split(",").toList
-  if (toAddresses.isEmpty) {
-    logger.error("Sendto email addresses are not recognised! Update the ini file and restart the application! Exiting...")
-    System.exit(1)
-  }
   // Test the credentials
   testCredentials()
 
@@ -39,7 +34,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
     }
   }
 
-  def sendMessage(msg: String): Unit = {
+  def sendMessage(msg: String, toAddresses: List[String]): Unit = {
     val email = new HtmlEmail()
     email.setHostName(options.get("general", "hostname"))
     email.setSmtpPort(options.get("general", "smtpport").toInt)
@@ -58,7 +53,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
     logger.info("  Email sent to: " + toAddresses + "!")
   }
 
-  def sendOfferNotification(offers: List[(String, String, OfferDetail)]): Unit = {
+  def sendOfferNotification(offers: List[(String, String, OfferDetail)], toAddresses: List[String]): Unit = {
     val linksHtml = offers.zipWithIndex.map{ case ((site, link, (offerId, priceHUF, sizeSM, roomsNum, address, area, description, floor, flatCondition)), idx) =>
       if (idx % 2 == 0) {
         s"""
@@ -66,8 +61,8 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
            |  <td class="tg-0lax"><a style="color: #126cbb;" href="$link" target="_blank" rel="noopener">$site</a></td>
            |  <td class="tg-0lax">$priceHUF</td>
            |  <td class="tg-lqy6">$sizeSM</td>
-           |  <td class="tg-lqy6">$area</td>
            |  <td class="tg-lqy6">$roomsNum</td>
+           |  <td class="tg-lqy6">$area</td>
            |  <td class="tg-lqy6">$address</td>
            |  <td class="tg-lqy6">$flatCondition</td>
            |</tr>
@@ -78,14 +73,15 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
            |  <td class="tg-hmp3"><a style="color: #126cbb;" href="$link" target="_blank" rel="noopener">$site</a></td>
            |  <td class="tg-hmp3">$priceHUF</td>
            |  <td class="tg-mb3i">$sizeSM</td>
-           |  <td class="tg-mb3i">$area</td>
            |  <td class="tg-mb3i">$roomsNum</td>
+           |  <td class="tg-mb3i">$area</td>
            |  <td class="tg-mb3i">$address</td>
            |  <td class="tg-mb3i">$flatCondition</td>
            |</tr>
          """.stripMargin
       }
     }
+    val site = offers.map{ case (s, _, _) => s }.headOption.getOrElse("No site!")
     val body =
       s"""
         |<head>
@@ -104,15 +100,24 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
         |<table class="tg">
         |    <thead>
         |        <tr>
-        |            <th class="tg-ddb2 " colspan="7" style="width: 99.6737%;"><br><span style="font-size: 24px;">Flatcheck notification</span></th>
+        |            <th class="tg-ddb2 " colspan="7"><span style="font-size: 24px;">Updates for your search: ${options.safeGet(site, "searchname")}</span></th>
         |        </tr>
         |    </thead>
         |    <tbody>
+        |    <tr>
+        |            <td class="tg-hmp3">Site</td>
+        |            <td class="tg-hmp3">Price</td>
+        |            <td class="tg-hmp3">m^2</td>
+        |            <td class="tg-hmp3">Number of rooms</td>
+        |            <td class="tg-hmp3">Area</td>
+        |            <td class="tg-hmp3">Address</td>
+        |            <td class="tg-hmp3">Condition</td>
+        |        </tr>
         ${linksHtml.mkString("\n")}
         |    </tbody>
         |</body>
       """.stripMargin
-    sendMessage(body)
+    sendMessage(body, toAddresses)
   }
 
 }
