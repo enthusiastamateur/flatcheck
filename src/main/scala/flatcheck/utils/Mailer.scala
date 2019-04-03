@@ -54,7 +54,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
   }
 
   def sendOfferNotification(offers: List[(String, String, OfferDetail)], toAddresses: List[String]): Unit = {
-    val linksHtml = offers.zipWithIndex.map{ case ((site, link, (offerId, priceHUF, sizeSM, roomsNum, address, area, description, floor, flatCondition)), idx) =>
+    val linksHtml = offers.zipWithIndex.map{ case ((site, link, (offerId, priceHUF, sizeSM, roomsNum, address, area, description, floor, flatCondition, orientation)), idx) =>
       if (idx % 2 == 0) {
         s"""
            |<tr>
@@ -65,6 +65,8 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
            |  <td class="tg-lqy6">$area</td>
            |  <td class="tg-lqy6">$address</td>
            |  <td class="tg-lqy6">$flatCondition</td>
+           |  <td class="tg-lqy6">$orientation</td>
+           |  <td class="tg-lqy6"><div class="hasTooltip">Desc<span>$description</span></div></td>
            |</tr>
          """.stripMargin
       } else {
@@ -77,6 +79,8 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
            |  <td class="tg-mb3i">$area</td>
            |  <td class="tg-mb3i">$address</td>
            |  <td class="tg-mb3i">$flatCondition</td>
+           |  <td class="tg-mb3i">$orientation</td>
+           |  <td class="tg-mb3i"><div class="hasTooltip">Desc<span>$description</span></div></td>
            |</tr>
          """.stripMargin
       }
@@ -94,6 +98,25 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
         |.tg .tg-lqy6{text-align:right;vertical-align:top}
         |.tg .tg-ddb2{font-family:serif !important;;text-align:center;vertical-align:top}
         |.tg .tg-0lax{text-align:left;vertical-align:top}
+        |
+        |.hasTooltip {
+        |	   text-decoration-line: underline;
+        |    text-decoration-style: dotted;
+        |}
+        |
+        |.hasTooltip span {
+        |    display: none;
+        |    color: #000;
+        |    padding: 3px;
+        |}
+        |
+        |.hasTooltip:hover span {
+        |    display: block;
+        |    position: absolute;
+        |    background-color: #D2E4FC;
+        |    border: 1px solid #26ADE4;
+        |    margin: 2px 10px;
+        |}
         |</style>
         |</head>
         |<body>
@@ -112,6 +135,8 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
         |            <td class="tg-hmp3">Area</td>
         |            <td class="tg-hmp3">Address</td>
         |            <td class="tg-hmp3">Condition</td>
+        |            <td class="tg-hmp3">Orientation</td>
+        |            <td class="tg-hmp3">Description</td>
         |        </tr>
         ${linksHtml.mkString("\n")}
         |    </tbody>

@@ -74,7 +74,8 @@ class DeepScraper(val driverFactory: WebDriverFactory,
         resMap.get(colNames(5)).flatten.getOrElse("").trim(),
         resMap.get(colNames(6)).flatten.getOrElse("").trim(),
         resMap.get(colNames(7)).flatten.getOrElse("").trim(),
-        resMap.get(colNames(8)).flatten.getOrElse("").trim()
+        resMap.get(colNames(8)).flatten.getOrElse("").trim(),
+        resMap.get(colNames(9)).flatten.getOrElse("").trim()
       )
     } match {
       case Success(value) => Success(value)

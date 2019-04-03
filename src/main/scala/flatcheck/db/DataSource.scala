@@ -107,7 +107,8 @@ class OffersSQLiteDataSource(val db: Database, val timeOutMins: Long = 5) extend
       offerDetails.area,
       offerDetails.description,
       offerDetails.floor,
-      offerDetails.flatCondition)
+      offerDetails.flatCondition,
+      offerDetails.orientation)
     val filteredQuery = withDetailsQuery.filter{ _._1 === id}
     Await.result(db.run(filteredQuery.result), Duration(timeOutMins, "min")) match {
       case Nil => None

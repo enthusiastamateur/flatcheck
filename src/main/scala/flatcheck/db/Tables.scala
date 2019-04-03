@@ -14,12 +14,14 @@ object Types {
     String,
     String,
     String,
+    String,
     String)
   type OfferWithDetails = (Long,
     String,
     String,
     Timestamp,
     Timestamp,
+    String,
     String,
     String,
     String,
@@ -54,5 +56,6 @@ class OfferDetails(tag: Tag) extends Table[Types.OfferDetail](tag, "OfferDetails
   def description = column[String]("description", O.Length(2048))
   def floor = column[String]("floor", O.Length(64))
   def flatCondition = column[String]("flatCondition", O.Length(64))
-  def * = (offerId, priceHUF, sizeSM, roomsNum, address, area, description, floor, flatCondition)
+  def orientation = column[String]("orientation", O.Length(64))
+  def * = (offerId, priceHUF, sizeSM, roomsNum, address, area, description, floor, flatCondition, orientation)
 }
