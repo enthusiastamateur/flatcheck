@@ -54,11 +54,11 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
   }
 
   def sendOfferNotification(offers: List[(String, String, OfferDetail)], toAddresses: List[String]): Unit = {
-    val linksHtml = offers.zipWithIndex.map{ case ((site, link, (offerId, priceHUF, sizeSM, roomsNum, address, area, description, floor, flatCondition, orientation)), idx) =>
+    val linksHtml = offers.zipWithIndex.map{ case ((siteName, link, (_, priceHUF, sizeSM, roomsNum, address, area, _, _, flatCondition, orientation)), idx) =>
       if (idx % 2 == 0) {
         s"""
            |<tr>
-           |  <td class="tg-0lax"><a style="color: #126cbb;" href="$link" target="_blank" rel="noopener">$site</a></td>
+           |  <td class="tg-0lax"><a style="color: #126cbb;" href="$link" target="_blank" rel="noopener">$siteName</a></td>
            |  <td class="tg-0lax">$priceHUF</td>
            |  <td class="tg-lqy6">$sizeSM</td>
            |  <td class="tg-lqy6">$roomsNum</td>
@@ -66,13 +66,12 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
            |  <td class="tg-lqy6">$address</td>
            |  <td class="tg-lqy6">$flatCondition</td>
            |  <td class="tg-lqy6">$orientation</td>
-           |  <td class="tg-lqy6"><div class="hasTooltip">Desc<span>$description</span></div></td>
            |</tr>
          """.stripMargin
       } else {
         s"""
            |<tr>
-           |  <td class="tg-hmp3"><a style="color: #126cbb;" href="$link" target="_blank" rel="noopener">$site</a></td>
+           |  <td class="tg-hmp3"><a style="color: #126cbb;" href="$link" target="_blank" rel="noopener">$siteName</a></td>
            |  <td class="tg-hmp3">$priceHUF</td>
            |  <td class="tg-mb3i">$sizeSM</td>
            |  <td class="tg-mb3i">$roomsNum</td>
@@ -80,7 +79,6 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
            |  <td class="tg-mb3i">$address</td>
            |  <td class="tg-mb3i">$flatCondition</td>
            |  <td class="tg-mb3i">$orientation</td>
-           |  <td class="tg-mb3i"><div class="hasTooltip">Desc<span>$description</span></div></td>
            |</tr>
          """.stripMargin
       }
@@ -123,7 +121,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
         |<table class="tg">
         |    <thead>
         |        <tr>
-        |            <th class="tg-ddb2 " colspan="7"><span style="font-size: 24px;">Updates for your search: ${options.safeGet(site, "searchname")}</span></th>
+        |            <th class="tg-ddb2 " colspan="8"><span style="font-size: 24px;">${options.safeGet(site, "searchname")}</span></th>
         |        </tr>
         |    </thead>
         |    <tbody>
@@ -136,7 +134,6 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
         |            <td class="tg-hmp3">Address</td>
         |            <td class="tg-hmp3">Condition</td>
         |            <td class="tg-hmp3">Orientation</td>
-        |            <td class="tg-hmp3">Description</td>
         |        </tr>
         ${linksHtml.mkString("\n")}
         |    </tbody>

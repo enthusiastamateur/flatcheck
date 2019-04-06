@@ -1,27 +1,28 @@
 package flatcheck.scraper
 
 import com.typesafe.scalalogging.LazyLogging
-import flatcheck.db.OffersDS
-import flatcheck.utils.WebDriverFactory
-import org.openqa.selenium.{By, WebDriver}
+import flatcheck.config.FlatcheckConfig
+import flatcheck.utils.SafeDriver
 
 import scala.util.{Failure, Success, Try}
 
-class SimpleTextScraper(val driverFactory: WebDriverFactory, val sleepTime: Int) extends LazyLogging {
+class SimpleTextScraper(val options: FlatcheckConfig, val sleepTime: Int) extends LazyLogging {
   def scrapePage(url: String, fields: Map[String, String]) : Map[String, Option[String]] = {
     Try({
-      val driver = driverFactory.createWebDriver()
+      logger.trace(s"Starting loading of url $url")
+      val driver = new SafeDriver(options, logger)
       driver.get(url)
-      Thread.sleep(sleepTime)
+      logger.trace(s"Starting scraping of url $url")
       val res = fields.map{ case (name, xpath) => name -> {
-          Try(driver.findElement(By.xpath(xpath)).getText.trim()) match {
-            case Success(res) => Some(res)
+          Try(driver.findElementByXPath(xpath, 0, 0).getText.trim()) match {
+            case Success(result) => Some(result)
             case Failure(err) =>
               logger.trace(s"Could not get text of element with xpath $xpath on page $url, the error was: ${err.getMessage}")
               None
           }
         }
       }
+      // Destroy instance
       driver.quit()
       res
     }) match {

@@ -14,15 +14,14 @@ import java.time.Instant
 import slick.jdbc.SQLiteProfile.api._
 import db._
 import java.util.Scanner
-import flatcheck.utils.WebDriverFactory
+import flatcheck.utils.{SafeDriver, WebDriverFactory}
 import flatcheck.config.FlatcheckConfig
-import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
+import org.openqa.selenium.{JavascriptExecutor, WebDriver}
 import scala.collection.JavaConverters._
-import com.typesafe.scalalogging.LazyLogging
+import com.typesafe.scalalogging.{LazyLogging, Logger}
 import flatcheck.backup.GDriveBackup
 import flatcheck.db.Types.OfferShortId
 import flatcheck.scraper.DeepScraper
-import flatcheck.utils.Utils
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -99,48 +98,37 @@ object FlatCheck extends App with LazyLogging {
       /*
        * Nested function to iterate through all found pages
        */
-      def iterateThroughPages(driver: WebDriver, offersDS: OffersDS, linksAcc: List[OfferShortId], previousLinkTexts: List[String], clickCount: Int): List[OfferShortId] = {
+      def iterateThroughPages(driver: SafeDriver, offersDS: OffersDS, linksAcc: List[OfferShortId], previousLinkTexts: List[String], clickCount: Int): List[OfferShortId] = {
         Try {
-          // First scroll down to the bottom of the page.
-          // Some pages load their contents dynamically, so scroll as much as needed
-          val jse = driver.asInstanceOf[JavascriptExecutor]
-          var lastHeight = 0.toLong
-          var currHeight = jse.executeScript("return document.body.scrollHeight").asInstanceOf[Long]
+          logger.info(s"  Started new page iteration #$clickCount")
+          logger.trace(s"The location is ${driver.getCurrentUrl}")
           var count = 0
-          val maxScrolls = try {
-            options.get(site, "maxscrolls").toInt
-          } catch {
-            case _: Exception =>
-              logger.trace("  Could not read number of max scrolls for site " + site + ". Using default value of 0.")
-              0
-          }
+          val maxScrolls = options.getOption(site, "maxscrolls").flatMap{ o => Try(o.toInt).toOption}.getOrElse(0)
 
+          var lastHeight = 0.toLong
+          var currHeight = driver.executeJavascript("return document.body.scrollHeight").asInstanceOf[Long]
           while (lastHeight != currHeight && count < maxScrolls) {
-            jse.executeScript("window.scrollTo(0, document.body.scrollHeight);")
-            logger.trace("  Scrolled down page to bottom!")
+            driver.executeJavascript("window.scrollTo(0, document.body.scrollHeight);")
             Thread.sleep(1000)
             lastHeight = currHeight
-            currHeight = jse.executeScript("return document.body.scrollHeight").asInstanceOf[Long]
+            currHeight = driver.executeJavascript("return document.body.scrollHeight").asInstanceOf[Long]
             count = count + 1
           }
 
           // Set the __cfRLUnblockHandlers variable to true - this is required on cloudflare enabled sites, in case
           // the javascript could not complete successfully
-          jse.executeScript("window.__cfRLUnblockHandlers = 1;")
+          driver.executeJavascript("window.__cfRLUnblockHandlers = 1;")
 
           // Run the xpath query sting to locate the links on the current page
           val linksSelector = options.get(site, "linkselectorxpath")
           val foundLinks = try {
-            driver.findElements(By.xpath(linksSelector)).asScala.toList
+            val res = driver.findElementsByXPath(linksSelector)
+            res
           } catch {
             case e: Exception =>
               logger.warn(s"  Error locating links on site $site using XPath selector string: $linksSelector. " +
                 s"The exception was:\n$e")
               return List()
-          }
-          logger.trace(s"  Details of the found links:")
-          foundLinks.foreach { we =>
-            logger.trace("  " + Utils.getWebElementDetails(we).mkString(","))
           }
 
           // Get the number of links found
@@ -150,61 +138,34 @@ object FlatCheck extends App with LazyLogging {
             _.getAttribute("href").split('?').head
           }
           if (foundLinkTexts == previousLinkTexts) {
-            logger.warn(s"Found links are exactly the same as in the last step! Probably moving on to the next page did not work...")
-          }
-          // Get new links on the current page
-          // Save new results to DB
-          val now = Timestamp.from(Instant.now())
-          val linksWithIdOpts = foundLinkTexts.map{ link =>
-            (link, offersDS.getOfferIdByLink(link))
-          }
-          // For the already seen links, let's update the last seen time
-          linksWithIdOpts.foreach{ case (_, idOpt) =>
-            idOpt.foreach{ id => offersDS.updateOfferLastSeen(id, now) }
-          }
-          val newLinksOnPage  = linksWithIdOpts.collect{ case (link, idOpt) if idOpt.isEmpty =>
-            (offersDS.addOffer((0, site, link, now, now)), site, link)
-          }
-
-          logger.info("  Located " + foundLinksSize + s" offer links on current page, out of which ${newLinksOnPage.size} was new!")
-
-          // Try to find the new page button
-          val nextPageButtonSelector = options.get(site, "nextbuttonselectorxpath")
-          val nextPageButtonOption: Option[WebElement] = try {
-            val hits = driver.findElements(By.xpath(nextPageButtonSelector)).asScala.toList
-            hits.size match {
-              case 0 =>
-                logger.trace(s"  Did not find next page button with XPath selector $nextPageButtonSelector")
-                None
-              case rest =>
-                if (rest > 1) {
-                  logger.trace(s"  Found more than one next page buttons with XPath selector:$nextPageButtonSelector. " +
-                    s"Going to use the first button in the list. The hits are: $hits")
-                } else {
-                  logger.trace(s"  Found next page button")
-                }
-                Some(hits.head)
+            logger.warn(s"Found links are exactly the same as in the last step! Probably moving on to the next page did not work. Will stop scraping this site in this iteration...")
+            linksAcc
+          } else {
+            // Get new links on the current page
+            // Save new results to DB
+            val now = Timestamp.from(Instant.now())
+            val linksWithIdOpts = foundLinkTexts.map { link =>
+              (link, offersDS.getOfferIdByLink(link))
             }
-          } catch {
-            case e: Exception =>
-              logger.trace(s"  Could not find next page button using JQuery selector: $nextPageButtonSelector. The exception was:\n$e")
-              None
-          }
+            // For the already seen links, let's update the last seen time
+            linksWithIdOpts.foreach { case (_, idOpt) =>
+              idOpt.foreach { id => offersDS.updateOfferLastSeen(id, now) }
+            }
+            val newLinksOnPage = linksWithIdOpts.collect { case (link, idOpt) if idOpt.isEmpty =>
+              (offersDS.addOffer((0, site, link, now, now)), site, link)
+            }
 
-          // If there is a new page button, click it and collect the links there as well. Otherwise, return what we have acquired so far
-          nextPageButtonOption match {
-            case Some(nextPageButton) =>
-              // Click on the new page button, and wait 5 seconds for everything to load, if we have not exhausted all the clicks
-              if (nextPageButton.isEnabled && clickCount < maxPageClicks) {
-                logger.info(s"  Clicking on next page button with text '${nextPageButton.getText}'...")
-                logger.trace(s"  Details of the nextPageButton:\n${Utils.getWebElementDetails(nextPageButton).mkString("\n")}")
-                nextPageButton.click()
-                Thread.sleep(5000)
-                iterateThroughPages(driver, offersDS, linksAcc ++ newLinksOnPage, foundLinkTexts, clickCount + 1)
-              } else {
-                linksAcc ++ newLinksOnPage
-              }
-            case None => linksAcc ++ newLinksOnPage
+            logger.info("  Located " + foundLinksSize + s" offer links on current page, out of which ${newLinksOnPage.size} was new!")
+
+            // Try to find the new page button
+            val nextPageButtonSelector = options.get(site, "nextbuttonselectorxpath")
+            // Click on the new page button, and wait 5 seconds for everything to load, if we have not exhausted all the clicks
+            if (driver.clickElementByXPath(nextPageButtonSelector) && clickCount < maxPageClicks) {
+              iterateThroughPages(driver, offersDS, linksAcc ++ newLinksOnPage, foundLinkTexts, clickCount + 1)
+            } else {
+              logger.trace(s"Button click was ineffective, returning with results")
+              linksAcc ++ newLinksOnPage
+            }
           }
         }.getOrElse{
           logger.warn(s"Could not finish iteration on page $site, stopping looking for now offers on it for the current iteration")
@@ -216,7 +177,7 @@ object FlatCheck extends App with LazyLogging {
       // Body of getNewURLsFromSite
       if (site == "general") List() else // The "general" tag does not correspond to a site
       {
-        val driver: WebDriver = webDriverFactory.createWebDriver()
+        val driver: SafeDriver = new SafeDriver(options, logger)
         logger.info("  --------------------------------------")
         logger.info("  Site: " + site)
         val baseUrl = options.get(site, "baseurl")

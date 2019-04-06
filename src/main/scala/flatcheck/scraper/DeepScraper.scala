@@ -61,7 +61,7 @@ class DeepScraper(val driverFactory: WebDriverFactory,
   def scrapeSitePage(site: String, link: String, id: Long, retry: Int) : Try[OfferDetail] = {
     Try {
       val scraperConfig = config.getDeepScraperConfig(site)
-      val scraper = new SimpleTextScraper(driverFactory, sleepTime)
+      val scraper = new SimpleTextScraper(config, sleepTime)
       val resMap = scraper.scrapePage(link, scraperConfig)
 
       val colNames: IndexedSeq[String] = offerDetails.baseTableRow.create_*.map(_.name).toIndexedSeq
