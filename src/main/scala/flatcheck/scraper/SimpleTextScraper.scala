@@ -3,14 +3,14 @@ package flatcheck.scraper
 import com.typesafe.scalalogging.LazyLogging
 import flatcheck.config.FlatcheckConfig
 import flatcheck.utils.SafeDriver
-
+import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Success, Try}
 
-class SimpleTextScraper(val options: FlatcheckConfig, val sleepTime: Int) extends LazyLogging {
+class SimpleTextScraper(val options: FlatcheckConfig, val sleepTime: Int, val ec: ExecutionContextExecutor) extends LazyLogging {
   def scrapePage(url: String, fields: Map[String, String]) : Map[String, Option[String]] = {
     Try({
       logger.trace(s"Starting loading of url $url")
-      val driver = new SafeDriver(options, logger)
+      val driver = new SafeDriver(options, logger, ec)
       driver.get(url)
       logger.trace(s"Starting scraping of url $url")
       val res = fields.map{ case (name, xpath) => name -> {

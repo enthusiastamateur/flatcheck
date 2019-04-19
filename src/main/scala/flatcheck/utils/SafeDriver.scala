@@ -1,17 +1,19 @@
 package flatcheck.utils
 
-import java.util.concurrent.TimeoutException
+import java.util.concurrent.{Executors, TimeoutException}
 import java.util.logging.Level
+
 import com.typesafe.scalalogging.Logger
 import flatcheck.config.FlatcheckConfig
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
-import scala.concurrent.{Await, Future}
+
+import scala.concurrent._
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConverters._
-import scala.concurrent.ExecutionContext.Implicits.global
 
-class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSeconds: Int = 20) {
+class SafeDriver(val options: FlatcheckConfig, val logger: Logger, implicit val ec: ExecutionContextExecutor, val timeoutSeconds: Int = 20) {
+  //implicit val ec : ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(5))
   private val driverFactory = new WebDriverFactory(options)
   private var driver : WebDriver = driverFactory.createWebDriver()
 
@@ -37,10 +39,12 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
     if (waitForLoad > timeoutSeconds) throw new IllegalArgumentException(s"waitForLoad ($waitForLoad) cannot exceed timeoutSeconds ($timeoutSeconds)")
     logger.trace(s"Started loading page $url, will wait $waitForLoad seconds for page to load completely")
     val loadResult = Future{
-      driver.get(url)
-      Thread.sleep(waitForLoad * 1000)
-      logger.trace(s"Finished sleep in get")
-      1
+      blocking {
+        driver.get(url)
+        Thread.sleep(waitForLoad * 1000)
+        logger.trace(s"Finished sleep in get")
+        1
+      }
     }
     val res = Try(Await.result(loadResult, Duration(timeoutSeconds, "sec")))
     printDriverLogs()
@@ -63,8 +67,10 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
   def findElementsByXPath(xpath: String, retry: Int = 0, maxRetry: Int = 2) : List[WebElement] = {
     logger.trace(s"Started looking for elements by XPath $xpath")
     val jseResult  = Future{
-      val res = driver.findElements(By.xpath(xpath)).asScala.toList
-      res
+      blocking {
+        val res = driver.findElements(By.xpath(xpath)).asScala.toList
+        res
+      }
     }
     val res = Try(Await.result(jseResult, Duration(timeoutSeconds, "sec")))
     printDriverLogs()
@@ -102,20 +108,22 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
   def clickElementByXPath(xpath: String, waitForLoad: Int = 8, retry: Int = 0, maxRetry: Int = 2): Boolean = {
     logger.trace(s"Started clicking on element by XPath $xpath")
     val clickResult = Future {
-      Try(findElementByXPath(xpath, retry, maxRetry)) match {
-        case Success(button) =>
-          if (button.isEnabled) {
-            logger.trace(s"Clicking on next page button with text '${button.getText}'...")
-            logger.trace(s"Details of the nextPageButton:\n${Utils.getWebElementDetails(button).mkString("\n")}")
-            button.click()
-            Thread.sleep(waitForLoad * 1000)
-            true
-          } else {
-            logger.trace(s"Element with text ${button.getText} is not enabled, proceeding with no-op")
-            false
-          }
-        case Failure(_ :NoSuchElementException) => false
-        case Failure(e) => throw e
+      blocking {
+        Try(findElementByXPath(xpath, retry, maxRetry)) match {
+          case Success(button) =>
+            if (button.isEnabled) {
+              logger.trace(s"Clicking on next page button with text '${button.getText}'...")
+              logger.trace(s"Details of the nextPageButton:\n${Utils.getWebElementDetails(button).mkString("\n")}")
+              button.click()
+              Thread.sleep(waitForLoad * 1000)
+              true
+            } else {
+              logger.trace(s"Element with text ${button.getText} is not enabled, proceeding with no-op")
+              false
+            }
+          case Failure(_: NoSuchElementException) => false
+          case Failure(e) => throw e
+        }
       }
     }
     val res = Try(Await.result(clickResult, Duration(timeoutSeconds, "sec")))
@@ -141,10 +149,12 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
   def executeJavascript(script: String, timeoutSeconds : Int = 10, retry: Int = 0, maxRetry : Int = 2): Object = {
     val jse = driver.asInstanceOf[JavascriptExecutor]
     val jseResult  = Future{
-      logger.trace(s"Started execution of JS script $script")
-      val res = jse.executeScript(script)
-      logger.trace(s"Finished execution of JS script $script, return value is: $res")
-      res
+      blocking {
+        logger.trace(s"Started execution of JS script $script")
+        val res = jse.executeScript(script)
+        logger.trace(s"Finished execution of JS script $script, return value is: $res")
+        res
+      }
     }
     val res = Try(Await.result(jseResult, Duration(timeoutSeconds, "sec")))
     res match {

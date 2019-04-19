@@ -23,16 +23,18 @@ import flatcheck.backup.GDriveBackup
 import flatcheck.db.Types.OfferShortId
 import flatcheck.scraper.DeepScraper
 import scala.annotation.tailrec
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 import java.lang.management.ManagementFactory
+import java.util.concurrent.Executors
 
 object FlatCheck extends App with LazyLogging {
   // Initalize parser
   logger.info("Starting FlatCheck...")
   val arguments : List[String] = ManagementFactory.getRuntimeMXBean.getInputArguments.asScala.toList
   logger.info(s"The startup arguments were: ${arguments.mkString(",")}")
+
+  implicit val ec : ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
 
   val iniName = "flatcheck.ini"
   val options = new FlatcheckConfig
@@ -84,7 +86,13 @@ object FlatCheck extends App with LazyLogging {
   }
   deepScraper.start()
   // Start main loop
-  mainloop(1)
+  val loopThread = new Thread("LoopThread") {
+    override def run(): Unit = {
+      Future{mainloop(1)}
+    }
+  }
+  loopThread.start()
+
 
   /*
    *  The main loop, implemented as a nested function
@@ -177,7 +185,7 @@ object FlatCheck extends App with LazyLogging {
       // Body of getNewURLsFromSite
       if (site == "general") List() else // The "general" tag does not correspond to a site
       {
-        val driver: SafeDriver = new SafeDriver(options, logger)
+        val driver: SafeDriver = new SafeDriver(options, logger, ec)
         logger.info("  --------------------------------------")
         logger.info("  Site: " + site)
         val baseUrl = options.get(site, "baseurl")

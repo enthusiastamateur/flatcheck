@@ -1,14 +1,16 @@
 package flatcheck.scraper
 
+import java.util.concurrent.Executors
+
 import com.typesafe.scalalogging.LazyLogging
 import flatcheck.config.FlatcheckConfig
 import flatcheck.db.{OfferDetails, OffersDS}
 import flatcheck.db.Types.{OfferDetail, OfferShortId}
 import flatcheck.utils.{Mailer, WebDriverFactory}
 import slick.lifted.TableQuery
+
 import scala.collection.mutable
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 import scala.util.matching.Regex
 import scala.collection.JavaConverters._
@@ -18,11 +20,12 @@ case object TooManyRetries extends Exception("Too many retries")
 class DeepScraper(val driverFactory: WebDriverFactory,
                   val config: FlatcheckConfig,
                   val ds : OffersDS,
+                  //implicit val ec: ExecutionContextExecutor,
                   val batchSize : Int = 30,
                   val sleepTime : Int = 5000,
                   val repeatTime: Int = 60000,
                   val maxRetries: Int = 3) extends Thread("ScrapeTimer") with LazyLogging {
-
+  implicit val ec : ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
   val offerDetails = TableQuery[OfferDetails]
   // Change to Map[String, Queue[OfferShortId]
   var targets : mutable.Map[String, mutable.Queue[OfferShortId]] = mutable.Map()
@@ -61,7 +64,7 @@ class DeepScraper(val driverFactory: WebDriverFactory,
   def scrapeSitePage(site: String, link: String, id: Long, retry: Int) : Try[OfferDetail] = {
     Try {
       val scraperConfig = config.getDeepScraperConfig(site)
-      val scraper = new SimpleTextScraper(config, sleepTime)
+      val scraper = new SimpleTextScraper(config, sleepTime, ec)
       val resMap = scraper.scrapePage(link, scraperConfig)
 
       val colNames: IndexedSeq[String] = offerDetails.baseTableRow.create_*.map(_.name).toIndexedSeq
