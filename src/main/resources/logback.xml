@@ -51,6 +51,10 @@
         <appender-ref ref="STDOUT" />
         <appender-ref ref="FLATCHECK" />
     </logger>
+    <logger name="flatcheck.scraper.LinkScraper" level="TRACE" additivity="false">
+        <appender-ref ref="STDOUT" />
+        <appender-ref ref="FLATCHECK" />
+    </logger>
     <logger name="flatcheck.utils.Mailer" level="DEBUG" additivity="false">
         <appender-ref ref="STDOUT" />
         <appender-ref ref="FLATCHECK" />

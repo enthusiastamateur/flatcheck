@@ -24,9 +24,10 @@ class DeepScraper(val driverFactory: WebDriverFactory,
                   val batchSize : Int = 30,
                   val sleepTime : Int = 5000,
                   val repeatTime: Int = 60000,
-                  val maxRetries: Int = 3) extends Thread("ScrapeTimer") with LazyLogging {
+                  val maxRetries: Int = 3) extends Thread("DeepScraper") with LazyLogging {
   implicit val ec : ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
   val offerDetails = TableQuery[OfferDetails]
+  val scraper = new SimpleTextScraper(config, sleepTime, ec)
   // Change to Map[String, Queue[OfferShortId]
   var targets : mutable.Map[String, mutable.Queue[OfferShortId]] = mutable.Map()
   val patternMHUF: Regex = "([ 0-9]*)(M FT)".r
@@ -64,7 +65,6 @@ class DeepScraper(val driverFactory: WebDriverFactory,
   def scrapeSitePage(site: String, link: String, id: Long, retry: Int) : Try[OfferDetail] = {
     Try {
       val scraperConfig = config.getDeepScraperConfig(site)
-      val scraper = new SimpleTextScraper(config, sleepTime, ec)
       val resMap = scraper.scrapePage(link, scraperConfig)
 
       val colNames: IndexedSeq[String] = offerDetails.baseTableRow.create_*.map(_.name).toIndexedSeq
@@ -138,7 +138,7 @@ class DeepScraper(val driverFactory: WebDriverFactory,
   }
 
   override def run(): Unit = {
-    logger.info(s"Started thread")
+    logger.info(s"Started DeepScraper")
     var processedDeepScrapes: Future[Unit] = Future()
     // Give the system time to evaluate the empty future
     Thread.sleep(1000)

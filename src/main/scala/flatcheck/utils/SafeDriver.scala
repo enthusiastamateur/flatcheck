@@ -3,6 +3,7 @@ package flatcheck.utils
 import java.util.concurrent.{Executors, TimeoutException}
 import java.util.logging.Level
 
+import com.machinepublishers.jbrowserdriver.JBrowserDriver
 import com.typesafe.scalalogging.Logger
 import flatcheck.config.FlatcheckConfig
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
@@ -17,7 +18,22 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, implicit val 
   private val driverFactory = new WebDriverFactory(options)
   private var driver : WebDriver = driverFactory.createWebDriver()
 
-  def getCurrentUrl: String = driver.getCurrentUrl
+  def getCurrentUrl(retry: Int = 0, maxRetry : Int = 2): String = {
+    Try{driver.getCurrentUrl} match {
+      case Success(value) =>
+        value
+      case Failure(e) =>
+        if (retry < maxRetry) {
+          logger.warn(s"Getting the driver url failed, trying again after reloading the page and waiting $timeoutSeconds seconds")
+          driver.navigate().refresh()
+          Thread.sleep(timeoutSeconds * 1000)
+          getCurrentUrl(retry+1, maxRetry)
+        } else {
+          logger.warn(s"Getting the driver url failed, and we have used all $maxRetry retries. Rethrowing the exception...")
+          throw e
+        }
+    }
+  }
 
   def printDriverLogs(): Unit = {
     val logTypes = driver.manage().logs().getAvailableLogTypes
@@ -52,13 +68,13 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, implicit val 
     res match {
       case Success(_) => Unit
       case Failure(e) =>
-        if (retry <= maxRetry) {
+        if (retry < maxRetry) {
           logger.warn(s"Loading of url $url has failed with message ${e.getMessage}, trying again with a fresh instance")
           driver.quit()
           driver = driverFactory.createWebDriver()
           get(url, waitForLoad, retry+1, maxRetry)
         } else {
-          logger.warn(s"Loading of url $url has timed out again, and we have used all $maxRetry retries. Rethrowing the exception...")
+          logger.warn(s"Loading of url $url has timed out, and we have used all $maxRetry retries. Rethrowing the exception...")
           throw e
         }
     }
@@ -80,13 +96,13 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, implicit val 
         logger.trace(s"The number of found elements is: ${value.size}")
         value
       case Failure(e) =>
-        if (retry <= maxRetry) {
+        if (retry < maxRetry) {
           logger.warn(s"Finding of elements by XPath $xpath failed with message ${e.getMessage}, trying again after reloading the page and waiting $timeoutSeconds seconds")
           driver.navigate().refresh()
           Thread.sleep(timeoutSeconds * 1000)
           findElementsByXPath(xpath, retry+1, maxRetry)
         } else {
-          logger.warn(s"Finding of elements by XPath $xpath has timed out again, and we have used all $maxRetry retries. Rethrowing the exception...")
+          logger.warn(s"Finding of elements by XPath $xpath has timed out, and we have used all $maxRetry retries. Rethrowing the exception...")
           throw e
         }
     }
@@ -134,13 +150,13 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, implicit val 
         logger.trace(s"The click return value is $value")
         value
       case Failure(e) =>
-        if (retry <= maxRetry) {
+        if (retry < maxRetry) {
           logger.warn(s"Clicking on element by XPath $xpath failed with message ${e.getMessage}, trying again after reloading the page and waiting $timeoutSeconds seconds")
           driver.navigate().refresh()
           Thread.sleep(timeoutSeconds * 1000)
           clickElementByXPath(xpath, waitForLoad, retry, maxRetry)
         } else {
-          logger.warn(s"Clicking of element by XPath $xpath has timed out again, and we have used all $maxRetry retries. Rethrowing the exception...")
+          logger.warn(s"Clicking of element by XPath $xpath has timed out, and we have used all $maxRetry retries. Rethrowing the exception...")
           throw e
         }
     }
@@ -160,7 +176,7 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, implicit val 
     res match {
       case Success(value) => value
       case Failure(e: TimeoutException) =>
-        if (retry <= maxRetry) {
+        if (retry < maxRetry) {
           logger.warn(s"Execution of JS script $script has timed out, trying again after reloading the page and waiting $timeoutSeconds seconds")
           driver.navigate().refresh()
           Thread.sleep(timeoutSeconds * 1000)
@@ -173,6 +189,10 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, implicit val 
         logger.warn(s"Encountered exception during execution of JS script $script, the message was: ${rest.getMessage}")
         throw rest
     }
+  }
+
+  def reset(): Unit = {
+    driver.asInstanceOf[JBrowserDriver].reset()
   }
 
   def quit(): Unit = {

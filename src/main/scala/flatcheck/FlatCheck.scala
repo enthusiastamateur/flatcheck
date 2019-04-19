@@ -8,25 +8,21 @@
   */
 package flatcheck
 
-import java.io.{File, FileInputStream}
-import java.sql.{SQLException, Timestamp}
-import java.time.Instant
+import java.sql.SQLException
 import slick.jdbc.SQLiteProfile.api._
 import db._
 import java.util.Scanner
-import flatcheck.utils.{SafeDriver, WebDriverFactory}
+import flatcheck.utils.WebDriverFactory
 import flatcheck.config.FlatcheckConfig
 import org.openqa.selenium.{JavascriptExecutor, WebDriver}
 import scala.collection.JavaConverters._
-import com.typesafe.scalalogging.{LazyLogging, Logger}
+import com.typesafe.scalalogging.LazyLogging
 import flatcheck.backup.GDriveBackup
-import flatcheck.db.Types.OfferShortId
-import flatcheck.scraper.DeepScraper
-import scala.annotation.tailrec
+import flatcheck.scraper.{DeepScraper, LinkScraper}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
-import java.lang.management.ManagementFactory
 import java.util.concurrent.Executors
+import java.lang.management.ManagementFactory
 
 object FlatCheck extends App with LazyLogging {
   // Initalize parser
@@ -37,16 +33,7 @@ object FlatCheck extends App with LazyLogging {
   implicit val ec : ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
 
   val iniName = "flatcheck.ini"
-  val options = new FlatcheckConfig
-  try {
-    //val is = new InputStreamReader(new FileInputStream(iniName), StandardCharsets.UTF_8)
-    options.read(new FileInputStream(iniName))
-  } catch {
-    case _: Exception =>
-      val currDir = new File("a").getAbsolutePath.dropRight(1)
-      logger.error("Couldn't read ini file: " + currDir + iniName + "\nExiting FlatCheck...")
-      System.exit(1)
-  }
+  val options = new FlatcheckConfig(iniName)
 
   // Initalize the main loop
   val maxIter = options.get("general", "exitafter").toInt
@@ -74,7 +61,8 @@ object FlatCheck extends App with LazyLogging {
   var processedDeepScrapes : Future[Int] = Future{0}
   val scraperBatchSize = options.safeGet("general","scraperBatchSize").toInt
   val scraperSleepTime = options.safeGet("general","scraperSleepTime").toInt
-  val deepScraper = new DeepScraper(webDriverFactory, options, offersDS, scraperBatchSize, scraperSleepTime * 1000)
+  val deepScraper = new DeepScraper(webDriverFactory, new FlatcheckConfig(iniName), offersDS,
+    scraperBatchSize, scraperSleepTime * 1000)
   // Check if there are offers without offerdetails => these we have to start scraping
   val offersWithoutDetails = offersDS.getOffersWithoutDetails
   if (offersWithoutDetails.nonEmpty) {
@@ -85,158 +73,36 @@ object FlatCheck extends App with LazyLogging {
     logger.debug(s"All sites have their details scraped!")
   }
   deepScraper.start()
-  // Start main loop
-  val loopThread = new Thread("LoopThread") {
-    override def run(): Unit = {
-      Future{mainloop(1)}
-    }
-  }
-  loopThread.start()
 
-
-  /*
-   *  The main loop, implemented as a nested function
-   */
-  @tailrec
-  def mainloop(iter: Int): Unit = {
-    /*
-     *  Nested function for getting new urls and saving them
-     */
-    def getNewURLsFromSite(site: String): List[OfferShortId] = {
-      /*
-       * Nested function to iterate through all found pages
-       */
-      def iterateThroughPages(driver: SafeDriver, offersDS: OffersDS, linksAcc: List[OfferShortId], previousLinkTexts: List[String], clickCount: Int): List[OfferShortId] = {
-        Try {
-          logger.info(s"  Started new page iteration #$clickCount")
-          logger.trace(s"The location is ${driver.getCurrentUrl}")
-          var count = 0
-          val maxScrolls = options.getOption(site, "maxscrolls").flatMap{ o => Try(o.toInt).toOption}.getOrElse(0)
-
-          var lastHeight = 0.toLong
-          var currHeight = driver.executeJavascript("return document.body.scrollHeight").asInstanceOf[Long]
-          while (lastHeight != currHeight && count < maxScrolls) {
-            driver.executeJavascript("window.scrollTo(0, document.body.scrollHeight);")
-            Thread.sleep(1000)
-            lastHeight = currHeight
-            currHeight = driver.executeJavascript("return document.body.scrollHeight").asInstanceOf[Long]
-            count = count + 1
-          }
-
-          // Set the __cfRLUnblockHandlers variable to true - this is required on cloudflare enabled sites, in case
-          // the javascript could not complete successfully
-          driver.executeJavascript("window.__cfRLUnblockHandlers = 1;")
-
-          // Run the xpath query sting to locate the links on the current page
-          val linksSelector = options.get(site, "linkselectorxpath")
-          val foundLinks = try {
-            val res = driver.findElementsByXPath(linksSelector)
-            res
-          } catch {
-            case e: Exception =>
-              logger.warn(s"  Error locating links on site $site using XPath selector string: $linksSelector. " +
-                s"The exception was:\n$e")
-              return List()
-          }
-
-          // Get the number of links found
-          val foundLinksSize = foundLinks.size
-          // Check if we are getting different results as before
-          val foundLinkTexts = foundLinks.map {
-            _.getAttribute("href").split('?').head
-          }
-          if (foundLinkTexts == previousLinkTexts) {
-            logger.warn(s"Found links are exactly the same as in the last step! Probably moving on to the next page did not work. Will stop scraping this site in this iteration...")
-            linksAcc
-          } else {
-            // Get new links on the current page
-            // Save new results to DB
-            val now = Timestamp.from(Instant.now())
-            val linksWithIdOpts = foundLinkTexts.map { link =>
-              (link, offersDS.getOfferIdByLink(link))
-            }
-            // For the already seen links, let's update the last seen time
-            linksWithIdOpts.foreach { case (_, idOpt) =>
-              idOpt.foreach { id => offersDS.updateOfferLastSeen(id, now) }
-            }
-            val newLinksOnPage = linksWithIdOpts.collect { case (link, idOpt) if idOpt.isEmpty =>
-              (offersDS.addOffer((0, site, link, now, now)), site, link)
-            }
-
-            logger.info("  Located " + foundLinksSize + s" offer links on current page, out of which ${newLinksOnPage.size} was new!")
-
-            // Try to find the new page button
-            val nextPageButtonSelector = options.get(site, "nextbuttonselectorxpath")
-            // Click on the new page button, and wait 5 seconds for everything to load, if we have not exhausted all the clicks
-            if (driver.clickElementByXPath(nextPageButtonSelector) && clickCount < maxPageClicks) {
-              iterateThroughPages(driver, offersDS, linksAcc ++ newLinksOnPage, foundLinkTexts, clickCount + 1)
-            } else {
-              logger.trace(s"Button click was ineffective, returning with results")
-              linksAcc ++ newLinksOnPage
-            }
-          }
-        }.getOrElse{
-          logger.warn(s"Could not finish iteration on page $site, stopping looking for now offers on it for the current iteration")
-          linksAcc
+  val mode = options.get("general", "mode").toLowerCase
+  mode match {
+    case "prod" | "production" =>
+      val linkScraper = new LinkScraper(new FlatcheckConfig(iniName), offersDS, deepScraper)
+      linkScraper.start()
+      while (true) {
+        /*
+        logger.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~Runtime stats~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        val mxBean = ManagementFactory.getThreadMXBean
+        val threadInfos = mxBean.getThreadInfo(mxBean.getAllThreadIds)
+        threadInfos.foreach{ threadInfo =>
+          logger.info(s"Thread name: ${threadInfo.getThreadName}")
+          logger.info(s"Thread state: ${threadInfo.getThreadState}")
+          logger.info(s"Locked object this thread is waiting for to be freed: ${threadInfo.getLockName}")
+          logger.info(s"Owner of the locked object: ${threadInfo.getLockOwnerName}")
+          logger.info(s"Objects currently locked by this thread:\n${threadInfo.getLockedMonitors.toList.map{ info => info.getLockedStackFrame.toString}.mkString("\n\n")}")
+          logger.info(s"Ownable synchronizers currently locked by this thread:\n${threadInfo.getLockedSynchronizers.toList.map{ sync => sync.toString}.mkString("\n\n")}")
+          logger.info(s"Thread waited count: ${threadInfo.getWaitedCount}")
         }
+        logger.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        */
+        logger.info("Main thread heatbeat")
+        Thread.sleep(60000*10)
       }
-
-      // -------------------------------------------------
-      // Body of getNewURLsFromSite
-      if (site == "general") List() else // The "general" tag does not correspond to a site
-      {
-        val driver: SafeDriver = new SafeDriver(options, logger, ec)
-        logger.info("  --------------------------------------")
-        logger.info("  Site: " + site)
-        val baseUrl = options.get(site, "baseurl")
-        try {
-          driver.get(baseUrl)
-        } catch {
-          case e: Exception =>
-            logger.warn(s"Error loading site using URL: $baseUrl, skipping it in this iteration. The exception was:\n$e")
-            return List()
-        }
-
-        // Iterate through all pages
-        val newLinks = iterateThroughPages(driver, offersDS, List(), List(), 0)
-        driver.quit()
-
-        // Update the datafiles
-        if (newLinks.nonEmpty) {
-          logger.info("  Found " + newLinks.size + " new offers!")
-        }
-        else {
-          logger.info("  No new offers found!")
-        }
-        newLinks
-
-      }
-      // End of body of getNewURLsFromSite
-      // -------------------------------------------------
-    }
-
-    // -------------------------------------------------
-    // Body of main loop
-    //
-    // The settings are reread on each iteration. This makes is possible to edit them on the fly!
-    logger.info("Beginning iteration #: " + iter)
-    val sites: List[String] = options.sections().asScala.toList
-
-    // Get new links from all sites
-    val mode = options.get("general", "mode").toLowerCase
-    mode match {
-      case "prod" | "production" =>
-        val allNewLinks : List[OfferShortId] = sites.flatMap(getNewURLsFromSite)
-
-        // Add the new links to the deepscraper's queue
-        deepScraper.addTargets(allNewLinks)
-
-        logger.info("Iteration # " + iter + " finished. Waiting " + waitTime + " minutes for next iteration!")
-        Thread.sleep((waitTime * 60000).toLong)
-
-      case "int" | "interactive" =>
-        logger.info("Entered interactive Javascript interpreter mode")
-        val scanner = new Scanner(System.in)
+    case "int" | "interactive" =>
+      logger.info("Entered interactive Javascript interpreter mode")
+      val scanner = new Scanner(System.in)
+      while (true) {
+        val sites: List[String] = options.sections().asScala.toList
         sites.foreach { site =>
           if (site != "general") {
             val baseUrl = options.get(site, "baseurl")
@@ -266,47 +132,43 @@ object FlatCheck extends App with LazyLogging {
             logger.info(s"Moving to next page...")
           }
         }
-
-      case "sql" =>
-        logger.info("Entered interactive SQL interpreter mode")
-        val scanner = new Scanner(System.in)
-        var line: String = null
-        while ( {
-          System.out.print("[SQL] > ")
-          line = scanner.nextLine()
-          line != "exit"
-        }) {
-          val res = Try({
-            val stmt = conn.createStatement()
-            val rs = stmt.executeQuery(line)
-            val rsmd = rs.getMetaData
-            val columnsNumber = rsmd.getColumnCount
-            val range = 1 to columnsNumber
-            System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~RESULTS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+      }
+    case "sql" =>
+      logger.info("Entered interactive SQL interpreter mode")
+      val scanner = new Scanner(System.in)
+      var line: String = null
+      while ( {
+        System.out.print("[SQL] > ")
+        line = scanner.nextLine()
+        line != "exit"
+      }) {
+        val res = Try({
+          val stmt = conn.createStatement()
+          val rs = stmt.executeQuery(line)
+          val rsmd = rs.getMetaData
+          val columnsNumber = rsmd.getColumnCount
+          val range = 1 to columnsNumber
+          System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~RESULTS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+          range.foreach{ i =>
+            if (i == 1) System.out.print("| ")
+            System.out.print(rsmd.getColumnName(i) + " | ")
+          }
+          System.out.println("\n---------------------------------------------------------------------")
+          while (rs.next()) {
             range.foreach{ i =>
               if (i == 1) System.out.print("| ")
-              System.out.print(rsmd.getColumnName(i) + " | ")
+              System.out.print(rs.getString(i) + " | ")
             }
-            System.out.println("\n---------------------------------------------------------------------")
-            while (rs.next()) {
-              range.foreach{ i =>
-                if (i == 1) System.out.print("| ")
-                System.out.print(rs.getString(i) + " | ")
-              }
-              System.out.print("\n")
-            }
-            System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-          })
-          res.recover{
-            case e: SQLException => System.out.println(s"SQL execution error: ${e.getMessage}")
+            System.out.print("\n")
           }
+          System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        })
+        res.recover{
+          case e: SQLException => System.out.println(s"SQL execution error: ${e.getMessage}")
         }
-        System.exit(0)
+      }
+      System.exit(0)
 
-      case rest => throw new IllegalArgumentException(s"Unknown operation mode: $rest")
-    }
-
-    logger.info("Iteration # " + iter + " finished")
-    mainloop(iter + 1)
+    case rest => throw new IllegalArgumentException(s"Unknown operation mode: $rest")
   }
 }

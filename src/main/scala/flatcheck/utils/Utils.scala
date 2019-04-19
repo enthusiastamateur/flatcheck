@@ -29,6 +29,7 @@ class WebDriverFactory(val options: FlatcheckConfig) {
       case "chrome" => new ChromeDriver()
       case "firefox" => new FirefoxDriver()
       case "jbrowser" => new JBrowserDriver(Settings.builder()
+        .processes(4)
         .blockAds(true)
         .headless(true)
         .javascript(true)

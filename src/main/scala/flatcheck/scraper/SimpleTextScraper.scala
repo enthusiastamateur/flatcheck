@@ -7,10 +7,12 @@ import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Success, Try}
 
 class SimpleTextScraper(val options: FlatcheckConfig, val sleepTime: Int, val ec: ExecutionContextExecutor) extends LazyLogging {
+  val driver = new SafeDriver(options, logger, ec)
+
   def scrapePage(url: String, fields: Map[String, String]) : Map[String, Option[String]] = {
     Try({
+      driver.reset()
       logger.trace(s"Starting loading of url $url")
-      val driver = new SafeDriver(options, logger, ec)
       driver.get(url)
       logger.trace(s"Starting scraping of url $url")
       val res = fields.map{ case (name, xpath) => name -> {
@@ -22,8 +24,6 @@ class SimpleTextScraper(val options: FlatcheckConfig, val sleepTime: Int, val ec
           }
         }
       }
-      // Destroy instance
-      driver.quit()
       res
     }) match {
       case Success(res) =>
