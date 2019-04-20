@@ -34,7 +34,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
     }
   }
 
-  def sendMessage(msg: String, toAddresses: List[String]): Unit = {
+  def sendMessage(site: String, description: String, msg: String, toAddresses: List[String]): Unit = {
     val email = new HtmlEmail()
     email.setHostName(options.get("general", "hostname"))
     email.setSmtpPort(options.get("general", "smtpport").toInt)
@@ -46,7 +46,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
     )
     email.setSSLOnConnect(options.get("general", "sslonconnect").toBoolean)
     email.setFrom(options.get("general", "address"))
-    email.setSubject(options.get("general", "emailsubject"))
+    email.setSubject(options.get("general", "emailsubject") + s" [$site] $description")
     toAddresses.foreach(address => email.addTo(address))
     email.setHtmlMsg(msg)
     email.send()
@@ -84,6 +84,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
       }
     }
     val site = offers.map{ case (s, _, _) => s }.headOption.getOrElse("No site!")
+    val searchName = options.safeGet(site, "searchname")
     val body =
       s"""
         |<head>
@@ -121,7 +122,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
         |<table class="tg">
         |    <thead>
         |        <tr>
-        |            <th class="tg-ddb2 " colspan="8"><span style="font-size: 24px;">${options.safeGet(site, "searchname")}</span></th>
+        |            <th class="tg-ddb2 " colspan="8"><span style="font-size: 24px;">$searchName</span></th>
         |        </tr>
         |    </thead>
         |    <tbody>
@@ -139,7 +140,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
         |    </tbody>
         |</body>
       """.stripMargin
-    sendMessage(body, toAddresses)
+    sendMessage(site, searchName, body, toAddresses)
   }
 
 }

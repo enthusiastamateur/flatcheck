@@ -19,9 +19,7 @@ import scala.collection.JavaConverters._
 import com.typesafe.scalalogging.LazyLogging
 import flatcheck.backup.GDriveBackup
 import flatcheck.scraper.{DeepScraper, LinkScraper}
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
-import java.util.concurrent.Executors
 import java.lang.management.ManagementFactory
 
 object FlatCheck extends App with LazyLogging {
