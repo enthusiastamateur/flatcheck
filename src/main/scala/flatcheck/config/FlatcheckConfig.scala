@@ -1,12 +1,36 @@
 package flatcheck.config
 
+import java.io.{File, FileInputStream}
+import com.typesafe.scalalogging.LazyLogging
 import org.ini4j.ConfigParser
 import scala.util.Try
 import flatcheck.db.OfferDetails
 import slick.lifted.TableQuery
+import scala.collection.JavaConverters._
 
-class FlatcheckConfig extends ConfigParser {
+class FlatcheckConfig(val iniName: String) extends ConfigParser with LazyLogging {
   val offerDetails = TableQuery[OfferDetails]
+  // Do the initial read
+  read()
+
+  def read() : Unit =  {
+    try {
+      read(new FileInputStream(iniName))
+    } catch {
+      case _: Exception =>
+        val currDir = new File("a").getAbsolutePath.dropRight(1)
+        logger.error("Couldn't read ini file: " + currDir + iniName)
+      //System.exit(1)
+    }
+  }
+
+  def reRead() : Unit = {
+    // Remove all sections first
+    sections().asScala.toList.foreach{ section =>
+      removeSection(section)
+    }
+    read()
+  }
 
   // ConfigParser turns all section and option to lowercase!
   def getOption(section: String, option: String) : Option[String] = Try(get(section.toLowerCase(), option.toLowerCase())).toOption

@@ -30,6 +30,10 @@ enablePlugins(DockerPlugin)
 
 javaOptions in Universal ++= Seq(
   "-Dfile.encoding=UTF8",
+  "-Dsun.rmi.transport.connectionTimeout=10000",
+  "-Dsun.rmi.transport.tcp.handshakeTimeout=10000",
+  "-Dsun.rmi.transport.tcp.responseTimeout=10000",
+  "-Dsun.rmi.transport.tcp.readTimeout=10000",
   "-Xmx1200m"//,
   //"-XX:+UseG1GC",
   //"-XX:+AggressiveOpts"
