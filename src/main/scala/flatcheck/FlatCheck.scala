@@ -39,11 +39,11 @@ object FlatCheck extends App with LazyLogging {
   val options = new FlatcheckConfig(iniName)
 
   // Initalize the main loop
-  val maxIter = options.get("general", "exitafter").toInt
-  val waitTime = options.get("general", "refreshtime").toDouble
+  val maxIter = options.getInt("general", "exitafter")
+  val waitTime = options.getDouble("general", "refreshtime")
 
   // Load the boundary on next page clicks, because it can happen that we end up in an infinite loop
-  val maxPageClicks = options.get("general", "maxpageclicks").toInt
+  val maxPageClicks = options.getInt("general", "maxpageclicks")
 
   // Load the  SQLite database
   val db = Database.forConfig("flatcheck_offers")
@@ -52,14 +52,14 @@ object FlatCheck extends App with LazyLogging {
   val conn = db.source.createConnection()
 
   // Set up the backupper
-  val backupper = new GDriveBackup("flatcheck.json", options.get("general", "syncfreqsec").toInt, conn)
+  val backupper = new GDriveBackup("flatcheck.json", options.getInt("general", "syncfreqsec"), conn)
   backupper.addFile("flatcheck.ini", isText = true)
   //backupper.addFile("flatcheck_offers.db", isText = false)
   backupper.startBackupper()
 
   // Initialize the future
-  val scraperBatchSize = options.safeGet("general","scraperBatchSize").toInt
-  val scraperSleepTime = options.safeGet("general","scraperSleepTime").toInt
+  val scraperBatchSize = options.safeGetInt("general","scraperBatchSize", Some(10))
+  val scraperSleepTime = options.safeGetInt("general","scraperSleepTime", Some(5))
   val deepScraper = new DeepScraper(new FlatcheckConfig(iniName), offersDS,
     scraperBatchSize, scraperSleepTime * 1000)
   // Check if there are offers without offerdetails => these we have to start scraping
@@ -73,7 +73,7 @@ object FlatCheck extends App with LazyLogging {
   }
   deepScraper.start()
 
-  val mode = options.get("general", "mode").toLowerCase
+  val mode = options.safeGetString("general", "mode").toLowerCase
   mode match {
     case "prod" | "production" =>
       val linkScraper = new LinkScraper(new FlatcheckConfig(iniName), offersDS, deepScraper)
@@ -105,7 +105,7 @@ object FlatCheck extends App with LazyLogging {
         val sites: List[String] = options.sections().asScala.toList
         sites.foreach { site =>
           if (site != "general") {
-            val baseUrl = options.get(site, "baseurl")
+            val baseUrl = options.safeGetString(site, "baseurl")
             logger.info(s"Visiting site $site at $baseUrl")
             driver.get(baseUrl)
             var line: String = null

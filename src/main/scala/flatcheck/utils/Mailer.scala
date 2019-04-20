@@ -84,7 +84,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
       }
     }
     val site = offers.map{ case (s, _, _) => s }.headOption.getOrElse("No site!")
-    val searchName = options.safeGet(site, "searchname")
+    val searchName = options.safeGetString(site, "searchname")
     val body =
       s"""
         |<head>
