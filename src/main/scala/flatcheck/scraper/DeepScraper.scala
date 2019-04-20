@@ -37,7 +37,6 @@ class DeepScraper(val config: FlatcheckConfig,
       targets(site) += tgt
     }
     logger.info(s"Added ${tgts.size} new offers to scrape")
-    logger.info(s"The new targets map is: $targets")
   }
 
   def convertPrice(prcStr: String): Int = {
@@ -59,21 +58,23 @@ class DeepScraper(val config: FlatcheckConfig,
     Try {
       logger.trace(s"Started scraping site $site, retry = $retry")
       val scraperConfig = config.getDeepScraperConfig(site)
-      val resMap = scraper.scrapePage(link, scraperConfig)
+      val resMapOpt = scraper.scrapePage(link, scraperConfig)
 
       val colNames: IndexedSeq[String] = offerDetails.baseTableRow.create_*.map(_.name).toIndexedSeq
-      (
-        id,
-        resMap.get(colNames(1)).flatten.getOrElse("").trim(),
-        resMap.get(colNames(2)).flatten.getOrElse("").trim(),
-        resMap.get(colNames(3)).flatten.getOrElse("").trim(),
-        resMap.get(colNames(4)).flatten.getOrElse("").trim(),
-        resMap.get(colNames(5)).flatten.getOrElse("").trim(),
-        resMap.get(colNames(6)).flatten.getOrElse("").trim(),
-        resMap.get(colNames(7)).flatten.getOrElse("").trim(),
-        resMap.get(colNames(8)).flatten.getOrElse("").trim(),
-        resMap.get(colNames(9)).flatten.getOrElse("").trim()
-      )
+      resMapOpt.map { resMap =>
+        (
+          id,
+          resMap.get(colNames(1)).flatten.getOrElse("").trim(),
+          resMap.get(colNames(2)).flatten.getOrElse("").trim(),
+          resMap.get(colNames(3)).flatten.getOrElse("").trim(),
+          resMap.get(colNames(4)).flatten.getOrElse("").trim(),
+          resMap.get(colNames(5)).flatten.getOrElse("").trim(),
+          resMap.get(colNames(6)).flatten.getOrElse("").trim(),
+          resMap.get(colNames(7)).flatten.getOrElse("").trim(),
+          resMap.get(colNames(8)).flatten.getOrElse("").trim(),
+          resMap.get(colNames(9)).flatten.getOrElse("").trim()
+        )
+      }.getOrElse(throw new Exception(s"SimpleTextScraper could not scrape site $site"))
     } match {
       case Success(value) => Success(value)
       case Failure(e) =>
@@ -108,6 +109,8 @@ class DeepScraper(val config: FlatcheckConfig,
               case Success(offerDetail) => Some(site, link, offerDetail)
               case Failure(e) =>
                 logger.error(s"Could not scrape site: $site, link: $link, the exception was: ${e.getMessage}")
+                logger.info(s"Adding back site to the queue")
+                addTargets(List((id, site, link)))
                 None
             }
           }

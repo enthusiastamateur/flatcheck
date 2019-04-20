@@ -8,7 +8,7 @@ import scala.util.{Failure, Success, Try}
 class SimpleTextScraper(val options: FlatcheckConfig, val sleepTime: Int) extends LazyLogging {
   val driver = new SafeDriver(options, logger)
 
-  def scrapePage(url: String, fields: Map[String, String]) : Map[String, Option[String]] = {
+  def scrapePage(url: String, fields: Map[String, String]) : Option[Map[String, Option[String]]] = {
     Try({
       driver.reset()
       logger.trace(s"Starting loading of url $url")
@@ -27,10 +27,10 @@ class SimpleTextScraper(val options: FlatcheckConfig, val sleepTime: Int) extend
     }) match {
       case Success(res) =>
         logger.trace(s"The raw scraped results for url  $url: ${res.mkString(",")}")
-        res
+        Some(res)
       case Failure(err) =>
         logger.error(s"Could not scrape page with url $url, the error was: ${err.getMessage}")
-        Map()
+        None
     }
   }
 }
