@@ -27,7 +27,12 @@ class SimpleTextScraper(val options: FlatcheckConfig, val sleepTime: Int) extend
     }) match {
       case Success(res) =>
         logger.trace(s"The raw scraped results for url  $url: ${res.mkString(",")}")
-        Some(res)
+        if (res.values.exists{ value => value.isDefined }) {
+          Some(res)
+        } else {
+          logger.warn(s"The raw scraped results does not contain any actual data. Will treat the results as failure")
+          None
+        }
       case Failure(err) =>
         logger.error(s"Could not scrape page with url $url, the error was: ${err.getMessage}")
         None
