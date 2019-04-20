@@ -192,10 +192,18 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, implicit val 
   }
 
   def reset(): Unit = {
-    driver.asInstanceOf[JBrowserDriver].reset()
+    quit()
+    Try{driver = driverFactory.createWebDriver()} match {
+      case Success(_) => logger.info("New driver instance successfully created")
+      case Failure(exception) => logger.info(s"Failed to create new driver instance, " +
+        s"the exception was: ${exception.getMessage}")
+    }
   }
 
   def quit(): Unit = {
-    driver.quit()
+    Try{driver.quit()} match {
+      case Success(_) => logger.info("Driver successfully closed")
+      case Failure(exception) => logger.info(s"Failed to close driver, the exception was: ${exception.getMessage}")
+    }
   }
 }
