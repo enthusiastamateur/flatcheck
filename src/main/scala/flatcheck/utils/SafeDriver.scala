@@ -2,13 +2,15 @@ package flatcheck.utils
 
 import java.util.concurrent.TimeUnit
 import java.util.logging.Level
+
 import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
 import com.typesafe.scalalogging.Logger
 import flatcheck.config.FlatcheckConfig
-import org.openqa.selenium.chrome.ChromeDriver
+import org.openqa.selenium.chrome.{ChromeDriver, ChromeOptions}
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
+
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConverters._
@@ -24,7 +26,12 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
   def createWebDriver(): WebDriver = {
     val driver = options.get("general", "browser").toLowerCase match {
       case "ie" | "internetexplorer" | "explorer" => new InternetExplorerDriver()
-      case "chrome" => new ChromeDriver()
+      case "chrome" => {
+        System.setProperty("webdriver.chrome.driver", "./chromedriver.exe")
+        val options = new ChromeOptions().setHeadless(true).
+          setBinary("C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe")
+        new ChromeDriver(options)
+      }
       case "firefox" => new FirefoxDriver()
       case "jbrowser" => new JBrowserDriver(Settings.builder()
         .processes(4)
