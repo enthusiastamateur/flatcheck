@@ -12,15 +12,17 @@ import java.sql.SQLException
 import slick.jdbc.SQLiteProfile.api._
 import db._
 import java.util.Scanner
-import flatcheck.utils.WebDriverFactory
 import flatcheck.config.FlatcheckConfig
-import org.openqa.selenium.{JavascriptExecutor, WebDriver}
+import org.openqa.selenium.JavascriptExecutor
 import scala.collection.JavaConverters._
 import com.typesafe.scalalogging.LazyLogging
 import flatcheck.backup.GDriveBackup
 import flatcheck.scraper.{DeepScraper, LinkScraper}
+
 import scala.util.{Failure, Success, Try}
 import java.lang.management.ManagementFactory
+
+import flatcheck.utils.SafeDriver
 
 object FlatCheck extends App with LazyLogging {
   // Initalize parser
@@ -28,17 +30,8 @@ object FlatCheck extends App with LazyLogging {
   val arguments : List[String] = ManagementFactory.getRuntimeMXBean.getInputArguments.asScala.toList
   logger.info(s"The startup arguments were: ${arguments.mkString(",")}")
 
-  //implicit val ec : ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
-
   val iniName = "flatcheck.ini"
   val options = new FlatcheckConfig(iniName)
-
-  // Initalize the main loop
-  val maxIter = options.get("general", "exitafter").toInt
-  val waitTime = options.get("general", "refreshtime").toDouble
-
-  // Load the boundary on next page clicks, because it can happen that we end up in an infinite loop
-  val maxPageClicks = options.get("general", "maxpageclicks").toInt
 
   // Load the  SQLite database
   val db = Database.forConfig("flatcheck_offers")
@@ -46,36 +39,33 @@ object FlatCheck extends App with LazyLogging {
   // Create connection for the interactive mode
   val conn = db.source.createConnection()
 
-  // Set up the backupper
-  val backupper = new GDriveBackup("flatcheck.json", options.get("general", "syncfreqsec").toInt, conn)
-  backupper.addFile("flatcheck.ini", isText = true)
-  //backupper.addFile("flatcheck_offers.db", isText = false)
-  backupper.startBackupper()
 
-  // Create the webdriver factory
-  val webDriverFactory = new WebDriverFactory(options)
 
-  // Initialize the future
-  val scraperBatchSize = options.safeGet("general","scraperBatchSize").toInt
-  val scraperSleepTime = options.safeGet("general","scraperSleepTime").toInt
-  val deepScraper = new DeepScraper(new FlatcheckConfig(iniName), offersDS,
-    scraperBatchSize, scraperSleepTime * 1000)
-  // Check if there are offers without offerdetails => these we have to start scraping
-  val offersWithoutDetails = offersDS.getOffersWithoutDetails
-  if (offersWithoutDetails.nonEmpty) {
-    // Add the new links to the deepscraper's queue
-    deepScraper.addTargets(offersWithoutDetails.map{ case (id, site, link, _, _) => (id, site, link)} )
-    logger.debug(s"Added ${offersWithoutDetails.size} offers to the initial DeepScraper queue")
-  } else {
-    logger.debug(s"All sites have their details scraped!")
-  }
-  deepScraper.start()
-
-  val mode = options.get("general", "mode").toLowerCase
+  val mode = options.safeGetString("general", "mode").toLowerCase
   mode match {
     case "prod" | "production" =>
+      // Set up the backupper
+      val backupper = new GDriveBackup("flatcheck.json", options.getInt("general", "syncfreqsec"), conn)
+      backupper.addFile("flatcheck.ini", isText = true)
+      // The database file is managed by the backupper process internally
+      backupper.startBackupper()
+
+      // Initialize the future
+      val deepScraper = new DeepScraper(new FlatcheckConfig(iniName), offersDS)
+      // Check if there are offers without offerdetails => these we have to start scraping
+      val offersWithoutDetails = offersDS.getOffersWithoutDetails
+      if (offersWithoutDetails.nonEmpty) {
+        // Add the new links to the deepscraper's queue
+        deepScraper.addTargets(offersWithoutDetails.map{ case (id, site, link, _, _) => (id, site, link)} )
+        logger.debug(s"Added ${offersWithoutDetails.size} offers to the initial DeepScraper queue")
+      } else {
+        logger.debug(s"All sites have their details scraped!")
+      }
+      deepScraper.start()
+
       val linkScraper = new LinkScraper(new FlatcheckConfig(iniName), offersDS, deepScraper)
       linkScraper.start()
+      val mainHeartBeatTime = options.safeGetInt("general", "mainheartbeat", Some(600))
       while (true) {
         /*
         logger.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~Runtime stats~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -93,18 +83,18 @@ object FlatCheck extends App with LazyLogging {
         logger.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         */
         logger.info("Main thread heatbeat")
-        Thread.sleep(60000*10)
+        Thread.sleep(mainHeartBeatTime * 1000)
       }
     case "int" | "interactive" =>
       logger.info("Entered interactive Javascript interpreter mode")
       val scanner = new Scanner(System.in)
+      val driver = new SafeDriver(new FlatcheckConfig(iniName), logger)
       while (true) {
         val sites: List[String] = options.sections().asScala.toList
         sites.foreach { site =>
           if (site != "general") {
-            val baseUrl = options.get(site, "baseurl")
+            val baseUrl = options.safeGetString(site, "baseurl")
             logger.info(s"Visiting site $site at $baseUrl")
-            val driver: WebDriver = webDriverFactory.createWebDriver()
             driver.get(baseUrl)
             var line: String = null
             while ( {

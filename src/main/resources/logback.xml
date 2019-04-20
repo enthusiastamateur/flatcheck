@@ -47,7 +47,7 @@
         </encoder>
     </appender>
 
-    <logger name="flatcheck.FlatCheck" level="TRACE" additivity="false">
+    <logger name="flatcheck.FlatCheck" level="DEBUG" additivity="false">
         <appender-ref ref="STDOUT" />
         <appender-ref ref="FLATCHECK" />
     </logger>
@@ -59,7 +59,7 @@
         <appender-ref ref="STDOUT" />
         <appender-ref ref="FLATCHECK" />
     </logger>
-    <logger name="flatcheck.utils.Utils" level="TRACE" additivity="false">
+    <logger name="flatcheck.utils.Utils" level="DEBUG" additivity="false">
         <appender-ref ref="STDOUT" />
         <appender-ref ref="FLATCHECK" />
     </logger>
