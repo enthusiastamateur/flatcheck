@@ -1,18 +1,48 @@
 package flatcheck.utils
 
+import java.util.concurrent.TimeUnit
 import java.util.logging.Level
+import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
 import com.typesafe.scalalogging.Logger
 import flatcheck.config.FlatcheckConfig
+import org.openqa.selenium.chrome.ChromeDriver
+import org.openqa.selenium.firefox.FirefoxDriver
+import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConverters._
 
 class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSeconds: Int = 20) {
-  private val driverFactory = new WebDriverFactory(options)
-  private var driver : WebDriver = driverFactory.createWebDriver()
+  private var driver : WebDriver = createWebDriver()
   logger.debug(s"Prewarming driver")
   Try{driver.get("www.google.com")}
+
+  def createWebDriver(): WebDriver = {
+    val driver = options.get("general", "browser").toLowerCase match {
+      case "ie" | "internetexplorer" | "explorer" => new InternetExplorerDriver()
+      case "chrome" => new ChromeDriver()
+      case "firefox" => new FirefoxDriver()
+      case "jbrowser" => new JBrowserDriver(Settings.builder()
+        .processes(4)
+        .blockAds(true)
+        .headless(true)
+        .javascript(true)
+        .logJavascript(true)
+        .logger(null)
+        .logsMax(1000)
+        .logWarnings(true)
+        .ssl("trustanything")
+        .userAgent(UserAgent.CHROME)
+        .quickRender(true)
+        .build())
+      case rest => throw new IllegalArgumentException(s"Unknown driver: $rest")
+    }
+    driver.manage().timeouts().pageLoadTimeout(10L, TimeUnit.SECONDS)
+    driver.manage().timeouts().setScriptTimeout(10L, TimeUnit.SECONDS)
+    driver.manage().timeouts().implicitlyWait(10L, TimeUnit.SECONDS)
+    driver
+  }
 
   def refresh(maxRetry: Int = 2, retry: Int = 0) : Unit = {
     logger.trace(s"Started page refresh, retry = $retry")
@@ -197,7 +227,7 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
 
   def reset(): Unit = {
     quit()
-    Try{driver = driverFactory.createWebDriver()} match {
+    Try{driver = createWebDriver()} match {
       case Success(_) => logger.debug("New driver instance successfully created")
       case Failure(exception) => logger.debug(s"Failed to create new driver instance, " +
         s"the exception was: ${exception.getMessage}")

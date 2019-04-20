@@ -9,18 +9,23 @@
 package flatcheck
 
 import java.sql.SQLException
+
 import slick.jdbc.SQLiteProfile.api._
 import db._
 import java.util.Scanner
-import flatcheck.utils.WebDriverFactory
+
 import flatcheck.config.FlatcheckConfig
 import org.openqa.selenium.{JavascriptExecutor, WebDriver}
+
 import scala.collection.JavaConverters._
 import com.typesafe.scalalogging.LazyLogging
 import flatcheck.backup.GDriveBackup
 import flatcheck.scraper.{DeepScraper, LinkScraper}
+
 import scala.util.{Failure, Success, Try}
 import java.lang.management.ManagementFactory
+
+import flatcheck.utils.SafeDriver
 
 object FlatCheck extends App with LazyLogging {
   // Initalize parser
@@ -51,9 +56,6 @@ object FlatCheck extends App with LazyLogging {
   backupper.addFile("flatcheck.ini", isText = true)
   //backupper.addFile("flatcheck_offers.db", isText = false)
   backupper.startBackupper()
-
-  // Create the webdriver factory
-  val webDriverFactory = new WebDriverFactory(options)
 
   // Initialize the future
   val scraperBatchSize = options.safeGet("general","scraperBatchSize").toInt
@@ -98,13 +100,13 @@ object FlatCheck extends App with LazyLogging {
     case "int" | "interactive" =>
       logger.info("Entered interactive Javascript interpreter mode")
       val scanner = new Scanner(System.in)
+      val driver = new SafeDriver(new FlatcheckConfig(iniName), logger)
       while (true) {
         val sites: List[String] = options.sections().asScala.toList
         sites.foreach { site =>
           if (site != "general") {
             val baseUrl = options.get(site, "baseurl")
             logger.info(s"Visiting site $site at $baseUrl")
-            val driver: WebDriver = webDriverFactory.createWebDriver()
             driver.get(baseUrl)
             var line: String = null
             while ( {

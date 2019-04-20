@@ -22,32 +22,4 @@ object Utils extends LazyLogging {
   }
 }
 
-class WebDriverFactory(val options: FlatcheckConfig) {
-  def createWebDriver(): WebDriver = {
-    val driver = options.get("general", "browser").toLowerCase match {
-      case "ie" | "internetexplorer" | "explorer" => new InternetExplorerDriver()
-      case "chrome" => new ChromeDriver()
-      case "firefox" => new FirefoxDriver()
-      case "jbrowser" => new JBrowserDriver(Settings.builder()
-        .processes(4)
-        .blockAds(true)
-        .headless(true)
-        .javascript(true)
-        .logJavascript(true)
-        .logger(null)
-        .logsMax(1000)
-        .logWarnings(true)
-        .ssl("trustanything")
-        .userAgent(UserAgent.CHROME)
-        .quickRender(true)
-        .build())
-      case rest => throw new IllegalArgumentException(s"Unknown driver: $rest")
-    }
-    driver.manage().timeouts().pageLoadTimeout(10L, TimeUnit.SECONDS)
-    driver.manage().timeouts().setScriptTimeout(10L, TimeUnit.SECONDS)
-    driver.manage().timeouts().implicitlyWait(10L, TimeUnit.SECONDS)
-    driver
-  }
-}
-
 

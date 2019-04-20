@@ -103,8 +103,8 @@ class LinkScraper(val config: FlatcheckConfig,
     }
   }
 
-  def getNewURLsFromSite(site: String): Unit = {
-    if (site == "general") List() else // The "general" tag does not correspond to a site
+  def scrapeNewURLsFromSite(site: String): Unit = {
+    if (site != "general") // The "general" tag does not correspond to a site
     {
       Try {
         driver.reset()
@@ -134,7 +134,7 @@ class LinkScraper(val config: FlatcheckConfig,
   def scanAllSites(iter: Int): Unit = {
     Try {
       val sites: List[String] = config.sections().asScala.toList
-      sites.foreach(getNewURLsFromSite)
+      sites.foreach(scrapeNewURLsFromSite)
     } match {
       case Success(_) =>
         logger.info("Iteration # " + iter + " finished. Waiting " + waitTime + " seconds for next iteration!")

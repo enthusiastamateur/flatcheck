@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import flatcheck.config.FlatcheckConfig
 import flatcheck.db.{OfferDetails, OffersDS}
 import flatcheck.db.Types.{OfferDetail, OfferShortId}
-import flatcheck.utils.{Mailer, WebDriverFactory}
+import flatcheck.utils.Mailer
 import slick.lifted.TableQuery
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -123,7 +123,7 @@ class DeepScraper(val config: FlatcheckConfig,
             logger.info(s"No new hits for site $parseSite")
           }
           // Now persist the data
-          newScrapedOffers.foreach { case (site, link, offerDetail) =>
+          newScrapedOffers.foreach { case (_, _, offerDetail) =>
             Try(ds.addOfferDetail(offerDetail)) match {
               case Failure(exception) => logger.warn(s"Could not add offerDetail $offerDetail to database, the exception was: ${exception.getMessage}")
               case _ =>
