@@ -106,7 +106,7 @@ class LinkScraper(val config: FlatcheckConfig,
     }
   }
 
-  def getNewURLsFromSite(site: String): List[OfferShortId] = {
+  def getNewURLsFromSite(site: String): Unit = {
     if (site == "general") List() else // The "general" tag does not correspond to a site
     {
       Try {
@@ -121,27 +121,31 @@ class LinkScraper(val config: FlatcheckConfig,
         // Update the datafiles
         if (newLinks.nonEmpty) {
           logger.info("  Found " + newLinks.size + " new offers!")
+          // Add the new links to the deepscraper's queue
+          deepScraper.addTargets(newLinks)
         } else {
           logger.info("  No new offers found!")
         }
-        newLinks
       } match {
-        case Success(value) => value
+        case Success(_) => logger.trace(s"Successfully finished getting URLs from site $site")
         case Failure(exception) =>
           logger.warn(s"Could not get new links from site $site, the exception was: ${exception.getMessage}. Proceeding with next site...")
-          List()
       }
     }
   }
 
   def scanAllSites(iter: Int): Unit = {
-    val sites: List[String] = config.sections().asScala.toList
-    val allNewLinks: List[OfferShortId] = sites.flatMap(getNewURLsFromSite)
-
-    // Add the new links to the deepscraper's queue
-    deepScraper.addTargets(allNewLinks)
-
-    logger.info("Iteration # " + iter + " finished. Waiting " + waitTime + " seconds for next iteration!")
+    Try {
+      // Prewarm the driver
+      driver.get("www.google.com")
+      val sites: List[String] = config.sections().asScala.toList
+      sites.foreach(getNewURLsFromSite)
+    } match {
+      case Success(_) =>
+        logger.info("Iteration # " + iter + " finished. Waiting " + waitTime + " seconds for next iteration!")
+      case Failure(exception) =>
+        logger.warn(s"Iteration # $iter failed with excpetion ${exception.getMessage}. Waiting $waitTime seconds for next iteration!")
+    }
     Thread.sleep((waitTime * 1000).toLong)
   }
 
