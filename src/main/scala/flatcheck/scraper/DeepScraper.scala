@@ -18,6 +18,7 @@ class DeepScraper(val config: FlatcheckConfig,
   private val maxRetry = config.safeGetInt("general", "maxretry", Some(2))
   private val batchSize = config.safeGetInt("general", "deepscraperbatchsize", Some(10))
   private val repeatTime = config.safeGetInt("general", "deepscraperrepeattime", Some(20))
+  private val padSize = config.safeGetInt("general", "deepscraperpadsize", Some(30))
   val offerDetails = TableQuery[OfferDetails]
   val scraper = new SimpleTextScraper(config)
   // Change to Map[String, Queue[OfferShortId]
@@ -26,6 +27,15 @@ class DeepScraper(val config: FlatcheckConfig,
   val patternHUF: Regex = "([ 0-9]*)(FT)".r
   val patternNM: Regex = "([ 0-9]*)(M2)".r
   val mailer = new Mailer(config)
+
+  def printTargets(): Unit = {
+    logger.info(s"-------------------------The status of the targets queue--------------------------")
+    logger.info("Site".padTo(padSize, ' ') + "|" + "Queue length".padTo(padSize, ' '))
+    targets.foreach{ case (site, queue) =>
+      logger.info(s"${site.padTo(padSize, ' ')}|${queue.size.toString.padTo(padSize, ' ')}")
+    }
+    logger.info(s"----------------------------------------------------------------------------------")
+  }
 
   def addTargets(tgts: List[OfferShortId]): Unit = {
     tgts.foreach{ tgt =>
@@ -89,6 +99,7 @@ class DeepScraper(val config: FlatcheckConfig,
 
   def scrapeNext() : Unit = {
     config.reRead()
+    printTargets()
     if (targets.isEmpty) {
       logger.info(s"No links to process in the queue!")
     } else {
