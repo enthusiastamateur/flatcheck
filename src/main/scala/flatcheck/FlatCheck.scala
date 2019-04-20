@@ -30,7 +30,7 @@ object FlatCheck extends App with LazyLogging {
   val arguments : List[String] = ManagementFactory.getRuntimeMXBean.getInputArguments.asScala.toList
   logger.info(s"The startup arguments were: ${arguments.mkString(",")}")
 
-  implicit val ec : ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
+  //implicit val ec : ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
 
   val iniName = "flatcheck.ini"
   val options = new FlatcheckConfig(iniName)
@@ -58,10 +58,9 @@ object FlatCheck extends App with LazyLogging {
   val webDriverFactory = new WebDriverFactory(options)
 
   // Initialize the future
-  var processedDeepScrapes : Future[Int] = Future{0}
   val scraperBatchSize = options.safeGet("general","scraperBatchSize").toInt
   val scraperSleepTime = options.safeGet("general","scraperSleepTime").toInt
-  val deepScraper = new DeepScraper(webDriverFactory, new FlatcheckConfig(iniName), offersDS,
+  val deepScraper = new DeepScraper(new FlatcheckConfig(iniName), offersDS,
     scraperBatchSize, scraperSleepTime * 1000)
   // Check if there are offers without offerdetails => these we have to start scraping
   val offersWithoutDetails = offersDS.getOffersWithoutDetails

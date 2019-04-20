@@ -2,14 +2,12 @@ package flatcheck.scraper
 
 import java.sql.Timestamp
 import java.time.Instant
-import java.util.concurrent.Executors
 import com.typesafe.scalalogging.LazyLogging
 import flatcheck.config.FlatcheckConfig
 import flatcheck.db.{OfferDetails, OffersDS}
 import flatcheck.db.Types.OfferShortId
-import flatcheck.utils.{Mailer, SafeDriver, WebDriverFactory}
+import flatcheck.utils.{Mailer, SafeDriver}
 import slick.lifted.TableQuery
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
@@ -18,11 +16,10 @@ class LinkScraper(val config: FlatcheckConfig,
                   val deepScraper: DeepScraper,
                   val waitTime: Int = 5,
                   val maxRetries: Int = 3) extends Thread("LinkScraper") with LazyLogging {
-  implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
   val offerDetails = TableQuery[OfferDetails]
   val mailer = new Mailer(config)
   val maxPageClicks : Int = config.get("general", "maxpageclicks").toInt
-  val driver: SafeDriver = new SafeDriver(config, logger, ec)
+  val driver: SafeDriver = new SafeDriver(config, logger)
 
   def iterateThroughPages(site: String, linksAcc: List[OfferShortId], previousLinkTexts: List[String],
                           clickCount: Int): List[OfferShortId] = {
@@ -136,8 +133,6 @@ class LinkScraper(val config: FlatcheckConfig,
 
   def scanAllSites(iter: Int): Unit = {
     Try {
-      // Prewarm the driver
-      driver.get("www.google.com")
       val sites: List[String] = config.sections().asScala.toList
       sites.foreach(getNewURLsFromSite)
     } match {
