@@ -51,7 +51,7 @@
         <appender-ref ref="STDOUT" />
         <appender-ref ref="FLATCHECK" />
     </logger>
-    <logger name="flatcheck.scraper.LinkScraper" level="DEBUG" additivity="false">
+    <logger name="flatcheck.scraper.LinkScraper" level="TRACE" additivity="false">
         <appender-ref ref="STDOUT" />
         <appender-ref ref="FLATCHECK" />
     </logger>
@@ -72,10 +72,10 @@
         <appender-ref ref="DB" />
     </logger>
 
-    <logger name="flatcheck.scraper.SimpleTextScraper" level="DEBUG" additivity="false">
+    <logger name="flatcheck.scraper.SimpleTextScraper" level="TRACE" additivity="false">
         <appender-ref ref="SCRAPER" />
     </logger>
-    <logger name="flatcheck.scraper.DeepScraper" level="DEBUG" additivity="false">
+    <logger name="flatcheck.scraper.DeepScraper" level="TRACE" additivity="false">
         <appender-ref ref="SCRAPER" />
     </logger>
 

@@ -8,11 +8,12 @@ import scala.util.{Failure, Success, Try}
 class SimpleTextScraper(val options: FlatcheckConfig) extends LazyLogging {
   val driver = new SafeDriver(options, logger)
 
-  def scrapePage(url: String, fields: Map[String, String]) : Option[Map[String, Option[String]]] = {
+  def scrapePage(site: String, url: String, fields: Map[String, String]) : Option[Map[String, Option[String]]] = {
     Try({
       driver.reset()
       logger.trace(s"Starting loading of url $url")
       driver.get(url)
+      options.safeGetInt(site, "textscraperwait", Some(1))
       logger.trace(s"Finished loading, starting scraping of url $url")
       val res = fields.map{ case (name, xpath) => name -> {
           Try(driver.findElementByXPath(xpath, 0).getText.trim()) match {

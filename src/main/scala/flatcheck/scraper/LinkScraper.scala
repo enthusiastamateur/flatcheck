@@ -32,7 +32,6 @@ class LinkScraper(val config: FlatcheckConfig,
       var currHeight = driver.executeJavascript("return document.body.scrollHeight").asInstanceOf[Long]
       while (lastHeight != currHeight && count < maxScrolls) {
         driver.executeJavascript("window.scrollTo(0, document.body.scrollHeight);")
-        Thread.sleep(1000)
         lastHeight = currHeight
         currHeight = driver.executeJavascript("return document.body.scrollHeight").asInstanceOf[Long]
         count = count + 1
@@ -110,7 +109,10 @@ class LinkScraper(val config: FlatcheckConfig,
         logger.info("  --------------------------------------")
         logger.info("  Site: " + site)
         val baseUrl = config.safeGetString(site, "baseurl")
+        val waitTime = config.safeGetInt(site, "linkscraperwait", Some(1))
         driver.get(baseUrl)
+        logger.info(s"Waiting $waitTime seconds for page to load")
+        Thread.sleep(waitTime * 1000)
         // Iterate through all pages
         val newLinks = iterateThroughPages(site, List(), List(), 0)
 

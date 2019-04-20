@@ -67,7 +67,7 @@ class DeepScraper(val config: FlatcheckConfig,
     Try {
       logger.trace(s"Started scraping site $site, retry = $retry")
       val scraperConfig = config.getDeepScraperConfig(site)
-      val resMapOpt = scraper.scrapePage(link, scraperConfig)
+      val resMapOpt = scraper.scrapePage(site, link, scraperConfig)
 
       val colNames: IndexedSeq[String] = offerDetails.baseTableRow.create_*.map(_.name).toIndexedSeq
       resMapOpt.map { resMap =>

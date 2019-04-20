@@ -168,7 +168,8 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
       Try(findElementByXPath(xpath, maxRetry)) match {
         case Success(button) =>
           if (button.isEnabled) {
-            logger.trace(s"Clicking on next page button with text '${button.getText}'...")
+            logger.trace(s"Clicking on next page button with text '${button.getText}', " +
+              s"will wait $waitForLoad seconds afterwards")
             logger.trace(s"Details of the nextPageButton:\n${Utils.getWebElementDetails(button).mkString("\n")}")
             button.click()
             Thread.sleep(waitForLoad * 1000)
@@ -189,12 +190,14 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
         value
       case Failure(e) =>
         if (retry < maxRetry) {
-          logger.warn(s"Clicking on element by XPath $xpath failed with message ${e.getMessage}, trying again after reloading the page and waiting $timeoutSeconds seconds")
+          logger.warn(s"Clicking on element by XPath $xpath failed with message ${e.getMessage}, " +
+            s"trying again after reloading the page and waiting $timeoutSeconds seconds")
           refresh()
           Thread.sleep(timeoutSeconds * 1000)
           clickElementByXPath(xpath, waitForLoad, maxRetry, retry+1)
         } else {
-          logger.warn(s"Clicking of element by XPath $xpath has timed out, and we have used all $maxRetry retries. Rethrowing the exception...")
+          logger.warn(s"Clicking of element by XPath $xpath has timed out, and we have used all $maxRetry retries. " +
+            s"Rethrowing the exception...")
           throw e
         }
     }
@@ -214,12 +217,14 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
       case Success(value) => value
       case Failure(e: TimeoutException) =>
         if (retry < maxRetry) {
-          logger.warn(s"Execution of JS script $script has timed out, trying again after reloading the page and waiting $timeoutSeconds seconds")
+          logger.warn(s"Execution of JS script $script has timed out, trying again after reloading the page and " +
+            s"waiting $timeoutSeconds seconds")
           refresh()
           Thread.sleep(timeoutSeconds * 1000)
           executeJavascript(script, timeoutSeconds, maxRetry, retry+1)
         } else {
-          logger.warn(s"Execution of JS script $script has timed out again, and we have used all $maxRetry retries. Rethrowing the exception...")
+          logger.warn(s"Execution of JS script $script has timed out again, and we have used all $maxRetry retries. " +
+            s"Rethrowing the exception...")
           throw e
         }
       case Failure(rest) =>
