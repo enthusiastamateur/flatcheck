@@ -17,11 +17,10 @@ class LinkScraper(val config: FlatcheckConfig,
   private val repeatTime = config.safeGetInt("general", "linkscraperrepeattime", Some(20))
   val offerDetails = TableQuery[OfferDetails]
   val mailer = new Mailer(config)
-  val maxPageClicks : Int = config.safeGetInt("general", "maxpageclicks", Some(10))
   val driver: SafeDriver = new SafeDriver(config, logger)
 
   def iterateThroughPages(site: String, linksAcc: List[OfferShortId], previousLinkTexts: List[String],
-                          clickCount: Int): List[OfferShortId] = {
+                          clickCount: Int, maxPageClicks: Int): List[OfferShortId] = {
     Try {
       logger.info(s"  Started new page iteration #$clickCount")
       logger.trace(s"The location is ${driver.getCurrentUrl()}")
@@ -86,10 +85,15 @@ class LinkScraper(val config: FlatcheckConfig,
         // Try to find the new page button
         val nextPageButtonSelector = config.safeGetString(site, "nextbuttonselectorxpath")
         // Click on the new page button, and wait 5 seconds for everything to load, if we have not exhausted all the clicks
-        if (driver.clickElementByXPath(nextPageButtonSelector) && clickCount < maxPageClicks) {
-          iterateThroughPages(site, linksAcc ++ newLinksOnPage, foundLinkTexts, clickCount + 1)
+        if (clickCount < maxPageClicks) {
+          if (driver.clickElementByXPath(nextPageButtonSelector)) {
+            iterateThroughPages(site, linksAcc ++ newLinksOnPage, foundLinkTexts, clickCount + 1, maxPageClicks)
+          } else {
+            logger.trace(s"Button click was ineffective, returning with results")
+            linksAcc ++ newLinksOnPage
+          }
         } else {
-          logger.trace(s"Button click was ineffective, returning with results")
+          logger.debug(s"Reached maximum number of new page clicks ($maxPageClicks), returning with results")
           linksAcc ++ newLinksOnPage
         }
       }
@@ -102,32 +106,38 @@ class LinkScraper(val config: FlatcheckConfig,
   }
 
   def scrapeNewURLsFromSite(site: String): Unit = {
-    if (site != "general") // The "general" tag does not correspond to a site
-    {
-      Try {
-        driver.reset()
-        logger.info("  --------------------------------------")
-        logger.info("  Site: " + site)
-        val baseUrl = config.safeGetString(site, "baseurl")
-        val waitTime = config.safeGetInt(site, "linkscraperwait", Some(1))
-        driver.get(baseUrl)
-        logger.info(s"Waiting $waitTime seconds for page to load")
-        Thread.sleep(waitTime * 1000)
-        // Iterate through all pages
-        val newLinks = iterateThroughPages(site, List(), List(), 0)
+    val skipSites = config.safeGetString("general","skipsites", Some("")).split(",")
+    if (skipSites.contains(site)) {
+      logger.trace(s"Skipping site $site because it is marked for skip")
+    } else {
+      if (site != "general") // The "general" tag does not correspond to a site
+      {
+        Try {
+          driver.reset()
+          logger.info("  --------------------------------------")
+          logger.info("  Site: " + site)
+          val baseUrl = config.safeGetString(site, "baseurl")
+          val waitTime = config.safeGetInt(site, "linkscraperwait", Some(1))
+          val maxPageClicks: Int = config.safeGetInt(site, "maxpageclicks", Some(10))
+          driver.get(baseUrl)
+          logger.info(s"Waiting $waitTime seconds for page to load")
+          Thread.sleep(waitTime * 1000)
+          // Iterate through all pages
+          val newLinks = iterateThroughPages(site, List(), List(), 0, maxPageClicks)
 
-        // Update the datafiles
-        if (newLinks.nonEmpty) {
-          logger.info("  Found " + newLinks.size + " new offers!")
-          // Add the new links to the deepscraper's queue
-          deepScraper.addTargets(newLinks)
-        } else {
-          logger.info("  No new offers found!")
+          // Update the datafiles
+          if (newLinks.nonEmpty) {
+            logger.info("  Found " + newLinks.size + " new offers!")
+            // Add the new links to the deepscraper's queue
+            deepScraper.addTargets(newLinks)
+          } else {
+            logger.info("  No new offers found!")
+          }
+        } match {
+          case Success(_) => logger.trace(s"Successfully finished getting URLs from site $site")
+          case Failure(exception) =>
+            logger.warn(s"Could not get new links from site $site, the exception was: ${exception.getMessage}. Proceeding with next site...")
         }
-      } match {
-        case Success(_) => logger.trace(s"Successfully finished getting URLs from site $site")
-        case Failure(exception) =>
-          logger.warn(s"Could not get new links from site $site, the exception was: ${exception.getMessage}. Proceeding with next site...")
       }
     }
   }

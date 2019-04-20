@@ -45,7 +45,7 @@ object FlatCheck extends App with LazyLogging {
   mode match {
     case "prod" | "production" =>
       // Set up the backupper
-      val backupper = new GDriveBackup("flatcheck.json", options.getInt("general", "syncfreqsec"), conn)
+      val backupper = new GDriveBackup("flatcheck.json", options.safeGetInt("general", "syncfreqsec", Some(86400)), conn)
       backupper.addFile("flatcheck.ini", isText = true)
       // The database file is managed by the backupper process internally
       backupper.startBackupper()

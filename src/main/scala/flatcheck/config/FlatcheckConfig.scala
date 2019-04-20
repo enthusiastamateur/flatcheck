@@ -75,6 +75,10 @@ class FlatcheckConfig(val iniName: String) extends ConfigParser with LazyLogging
     getConverted(section, option, _.toDouble, default)
   }
 
+  def safeGetBoolean(section: String, option: String, default: Option[Boolean] = None): Boolean = {
+    getConverted(section, option, _.toBoolean, default)
+  }
+
   // Load all configs related to the deep scraper
   def getDeepScraperConfig(section: String): Map[String, String] = {
     val colNames : List[String] = offerDetails.baseTableRow.create_*.map(_.name).toList

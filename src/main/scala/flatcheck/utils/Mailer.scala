@@ -15,15 +15,15 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
   def testCredentials(): Unit = {
     logger.info("Verifying SMTP credentials...")
     val email = new SimpleEmail()
-    email.setHostName(options.get("general", "hostname"))
-    email.setSmtpPort(options.get("general", "smtpport").toInt)
+    email.setHostName(options.safeGetString("general", "hostname"))
+    email.setSmtpPort(options.safeGetInt("general", "smtpport"))
     email.setAuthenticator(
       new DefaultAuthenticator(
-        options.get("general", "address"),
-        options.get("general", "emailpassword")
+        options.safeGetString("general", "address"),
+        options.safeGetString("general", "emailpassword")
       )
     )
-    email.setSSLOnConnect(options.get("general", "sslonconnect").toBoolean)
+    email.setSSLOnConnect(options.safeGetBoolean("general", "sslonconnect"))
     Try(email.getMailSession.getTransport().connect()) match {
       case Failure(_: AuthenticationFailedException) =>
         logger.error(s"Authentication has failed, " +
@@ -36,21 +36,22 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
 
   def sendMessage(site: String, description: String, msg: String, toAddresses: List[String]): Unit = {
     val email = new HtmlEmail()
-    email.setHostName(options.get("general", "hostname"))
-    email.setSmtpPort(options.get("general", "smtpport").toInt)
+    email.setHostName(options.safeGetString("general", "hostname"))
+    email.setSmtpPort(options.safeGetString("general", "smtpport").toInt)
     email.setAuthenticator(
       new DefaultAuthenticator(
-        options.get("general", "address"),
-        options.get("general", "emailpassword")
+        options.safeGetString("general", "address"),
+        options.safeGetString("general", "emailpassword")
       )
     )
-    email.setSSLOnConnect(options.get("general", "sslonconnect").toBoolean)
-    email.setFrom(options.get("general", "address"))
-    email.setSubject(options.get("general", "emailsubject") + s" [$site] $description")
+    email.setSSLOnConnect(options.safeGetString("general", "sslonconnect").toBoolean)
+    email.setFrom(options.safeGetString("general", "address"))
+    val subject = options.safeGetString("general", "emailsubject") + s" [$site] $description"
+    email.setSubject(subject)
     toAddresses.foreach(address => email.addTo(address))
     email.setHtmlMsg(msg)
     email.send()
-    logger.info("  Email sent to: " + toAddresses + "!")
+    logger.info(s"  Email with subject $subject sent to: $toAddresses !")
   }
 
   def sendOfferNotification(offers: List[(String, String, OfferDetail)], toAddresses: List[String]): Unit = {

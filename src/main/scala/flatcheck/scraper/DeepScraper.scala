@@ -29,10 +29,15 @@ class DeepScraper(val config: FlatcheckConfig,
   val mailer = new Mailer(config)
 
   def printTargets(): Unit = {
+    val skipSites = config.safeGetString("general","skipsites", Some("")).split(",")
     logger.info(s"-------------------------The status of the targets queue--------------------------")
     logger.info("Site".padTo(padSize, ' ') + "|" + "Queue length".padTo(padSize, ' '))
     targets.foreach{ case (site, queue) =>
-      logger.info(s"${site.padTo(padSize, ' ')}|${queue.size.toString.padTo(padSize, ' ')}")
+      if (skipSites.contains(site)) {
+        logger.info(s"${site.padTo(padSize, ' ')}|${(queue.size.toString + " (skip)").padTo(padSize, ' ')}")
+      } else {
+        logger.info(s"${site.padTo(padSize, ' ')}|${queue.size.toString.padTo(padSize, ' ')}")
+      }
     }
     logger.info(s"----------------------------------------------------------------------------------")
   }
@@ -100,55 +105,61 @@ class DeepScraper(val config: FlatcheckConfig,
   def scrapeNext() : Unit = {
     config.reRead()
     printTargets()
+    val skipSites = config.safeGetString("general","skipsites", Some("")).split(",")
     if (targets.isEmpty) {
       logger.info(s"No links to process in the queue!")
     } else {
       // Process the the links in groups by site, because each group can have different recipients
       val sites: List[String] = config.sections().asScala.toList
-      sites.filter{ _ != "general"}.foreach { parseSite =>
-        Try {
-          val siteQueue = targets.getOrElse(parseSite, mutable.Queue[OfferShortId]())
-          val items = (0 until batchSize).flatMap { _ =>
-            if (siteQueue.nonEmpty) {
-              Some(siteQueue.dequeue())
-            } else None
-          }.toList
-          logger.debug(s"Found ${items.size} new offers from site $parseSite")
-          val newScrapedOffers: List[(String, String, OfferDetail)] = items.flatMap { case (id, site, link) =>
-            logger.trace(s"Starting deep-scrape of offer with id $id, link $link")
-            scrapeSitePage(site, link, id) match {
-              case Success(offerDetail) => Some(site, link, offerDetail)
-              case Failure(e) =>
-                logger.warn(s"Could not scrape site: $site, link: $link, the exception was: ${e.getMessage}." +
-                  s" Adding back site to the queue")
-                addTargets(List((id, site, link)))
-                None
-            }
-          }
-          // Send notification email
-          val sendTo = config.safeGetString(parseSite, "sendto").split(",").toList
-          if (newScrapedOffers.nonEmpty) {
-            if (sendTo.nonEmpty) {
-              mailer.sendOfferNotification(newScrapedOffers, sendTo)
-            } else {
-              logger.debug(s"No recipients marked for site $parseSite, will not send any emails")
-            }
+      sites.filter{ _ != "general"}.foreach {
+        parseSite =>
+          if (skipSites.contains(parseSite)) {
+            logger.trace(s"Skipping site $parseSite because it is marked for skip")
           } else {
-            logger.debug(s"No new hits for site $parseSite")
-          }
-          // Now persist the data
-          newScrapedOffers.foreach { case (_, _, offerDetail) =>
-            Try(ds.addOfferDetail(offerDetail)) match {
-              case Failure(exception) => logger.warn(s"Could not add offerDetail $offerDetail to database, the exception was: ${exception.getMessage}")
-              case _ =>
+            Try {
+              val siteQueue = targets.getOrElse(parseSite, mutable.Queue[OfferShortId]())
+              val items = (0 until batchSize).flatMap { _ =>
+                if (siteQueue.nonEmpty) {
+                  Some(siteQueue.dequeue())
+                } else None
+              }.toList
+              logger.debug(s"Found ${items.size} new offers from site $parseSite")
+              val newScrapedOffers: List[(String, String, OfferDetail)] = items.flatMap { case (id, site, link) =>
+                logger.trace(s"Starting deep-scrape of offer with id $id, link $link")
+                scrapeSitePage(site, link, id) match {
+                  case Success(offerDetail) => Some(site, link, offerDetail)
+                  case Failure(e) =>
+                    logger.warn(s"Could not scrape site: $site, link: $link, the exception was: ${e.getMessage}." +
+                      s" Adding back site to the queue")
+                    addTargets(List((id, site, link)))
+                    None
+                }
+              }
+              // Send notification email
+              val sendTo = config.safeGetString(parseSite, "sendto").split(",").toList
+              if (newScrapedOffers.nonEmpty) {
+                if (sendTo.nonEmpty) {
+                  mailer.sendOfferNotification(newScrapedOffers, sendTo)
+                } else {
+                  logger.debug(s"No recipients marked for site $parseSite, will not send any emails")
+                }
+              } else {
+                logger.debug(s"No new hits for site $parseSite")
+              }
+              // Now persist the data
+              newScrapedOffers.foreach { case (_, _, offerDetail) =>
+                Try(ds.addOfferDetail(offerDetail)) match {
+                  case Failure(exception) => logger.warn(s"Could not add offerDetail $offerDetail to database, the exception was: ${exception.getMessage}")
+                  case _ =>
+                }
+              }
+              logger.trace(s"Finished with the current scrape run for site $parseSite, items remaining in the queue: ${targets.getOrElse(parseSite, mutable.Queue[OfferShortId]()).size}")
+            } match {
+              case Success(_) => logger.trace(s"Successfully finished with site $parseSite")
+              case Failure(exception) => logger.warn(s"Deep-scraping site $parseSite failed with " +
+                s"exception ${exception.getMessage}. Moving on to next site...")
             }
           }
-          logger.trace(s"Finished with the current scrape run for site $parseSite, items remaining in the queue: ${targets.getOrElse(parseSite, mutable.Queue[OfferShortId]()).size}")
-        } match {
-          case Success(_) => logger.trace(s"Successfully finished with site $parseSite")
-          case Failure(exception) => logger.warn(s"Deep-scraping site $parseSite failed with " +
-            s"exception ${exception.getMessage}. Moving on to next site...")
-        }
       }
     }
   }
