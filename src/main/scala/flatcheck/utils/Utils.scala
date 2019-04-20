@@ -1,13 +1,7 @@
 package flatcheck.utils
 
-import java.util.concurrent.TimeUnit
-import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
-import flatcheck.config.FlatcheckConfig
-import org.openqa.selenium.chrome.ChromeDriver
-import org.openqa.selenium.{WebDriver, WebElement}
-import org.openqa.selenium.firefox.FirefoxDriver
-import org.openqa.selenium.ie.InternetExplorerDriver
-import com.typesafe.scalalogging.{LazyLogging, Logger}
+import org.openqa.selenium.WebElement
+import com.typesafe.scalalogging.LazyLogging
 
 object Utils extends LazyLogging {
   def getWebElementDetails(we: WebElement): Map[String, String] = {

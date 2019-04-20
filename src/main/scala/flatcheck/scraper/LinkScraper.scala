@@ -13,12 +13,11 @@ import scala.util.{Failure, Success, Try}
 
 class LinkScraper(val config: FlatcheckConfig,
                   val ds: OffersDS,
-                  val deepScraper: DeepScraper,
-                  val waitTime: Int = 5,
-                  val maxRetries: Int = 3) extends Thread("LinkScraper") with LazyLogging {
+                  val deepScraper: DeepScraper) extends Thread("LinkScraper") with LazyLogging {
+  private val repeatTime = config.safeGetInt("general", "linkscraperrepeattime", Some(20))
   val offerDetails = TableQuery[OfferDetails]
   val mailer = new Mailer(config)
-  val maxPageClicks : Int = config.get("general", "maxpageclicks").toInt
+  val maxPageClicks : Int = config.safeGetInt("general", "maxpageclicks", Some(10))
   val driver: SafeDriver = new SafeDriver(config, logger)
 
   def iterateThroughPages(site: String, linksAcc: List[OfferShortId], previousLinkTexts: List[String],
@@ -27,7 +26,7 @@ class LinkScraper(val config: FlatcheckConfig,
       logger.info(s"  Started new page iteration #$clickCount")
       logger.trace(s"The location is ${driver.getCurrentUrl()}")
       var count = 0
-      val maxScrolls = config.getOption(site, "maxscrolls").flatMap { o => Try(o.toInt).toOption }.getOrElse(0)
+      val maxScrolls = config.safeGetInt(site, "maxscrolls", Some(0))
 
       var lastHeight = 0.toLong
       var currHeight = driver.executeJavascript("return document.body.scrollHeight").asInstanceOf[Long]
@@ -44,7 +43,7 @@ class LinkScraper(val config: FlatcheckConfig,
       driver.executeJavascript("window.__cfRLUnblockHandlers = 1;")
 
       // Run the xpath query sting to locate the links on the current page
-      val linksSelector = config.get(site, "linkselectorxpath")
+      val linksSelector = config.safeGetString(site, "linkselectorxpath")
       val foundLinks = try {
         val res = driver.findElementsByXPath(linksSelector)
         res
@@ -86,7 +85,7 @@ class LinkScraper(val config: FlatcheckConfig,
         logger.info("  Located " + foundLinksSize + s" offer links on current page, out of which ${newLinksOnPage.size} was new!")
 
         // Try to find the new page button
-        val nextPageButtonSelector = config.get(site, "nextbuttonselectorxpath")
+        val nextPageButtonSelector = config.safeGetString(site, "nextbuttonselectorxpath")
         // Click on the new page button, and wait 5 seconds for everything to load, if we have not exhausted all the clicks
         if (driver.clickElementByXPath(nextPageButtonSelector) && clickCount < maxPageClicks) {
           iterateThroughPages(site, linksAcc ++ newLinksOnPage, foundLinkTexts, clickCount + 1)
@@ -110,7 +109,7 @@ class LinkScraper(val config: FlatcheckConfig,
         driver.reset()
         logger.info("  --------------------------------------")
         logger.info("  Site: " + site)
-        val baseUrl = config.get(site, "baseurl")
+        val baseUrl = config.safeGetString(site, "baseurl")
         driver.get(baseUrl)
         // Iterate through all pages
         val newLinks = iterateThroughPages(site, List(), List(), 0)
@@ -133,15 +132,16 @@ class LinkScraper(val config: FlatcheckConfig,
 
   def scanAllSites(iter: Int): Unit = {
     Try {
+      config.reRead()
       val sites: List[String] = config.sections().asScala.toList
       sites.foreach(scrapeNewURLsFromSite)
     } match {
       case Success(_) =>
-        logger.info("Iteration # " + iter + " finished. Waiting " + waitTime + " seconds for next iteration!")
+        logger.info(s"Iteration # $iter finished. Waiting $repeatTime seconds for next iteration!")
       case Failure(exception) =>
-        logger.warn(s"Iteration # $iter failed with excpetion ${exception.getMessage}. Waiting $waitTime seconds for next iteration!")
+        logger.warn(s"Iteration # $iter failed with excpetion ${exception.getMessage}. Waiting $repeatTime seconds for next iteration!")
     }
-    Thread.sleep((waitTime * 1000).toLong)
+    Thread.sleep((repeatTime * 1000).toLong)
   }
 
   override def run(): Unit = {

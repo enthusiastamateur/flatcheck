@@ -5,7 +5,7 @@ import flatcheck.config.FlatcheckConfig
 import flatcheck.utils.SafeDriver
 import scala.util.{Failure, Success, Try}
 
-class SimpleTextScraper(val options: FlatcheckConfig, val sleepTime: Int) extends LazyLogging {
+class SimpleTextScraper(val options: FlatcheckConfig) extends LazyLogging {
   val driver = new SafeDriver(options, logger)
 
   def scrapePage(url: String, fields: Map[String, String]) : Option[Map[String, Option[String]]] = {
@@ -13,7 +13,7 @@ class SimpleTextScraper(val options: FlatcheckConfig, val sleepTime: Int) extend
       driver.reset()
       logger.trace(s"Starting loading of url $url")
       driver.get(url)
-      logger.trace(s"Starting scraping of url $url")
+      logger.trace(s"Finished loading, starting scraping of url $url")
       val res = fields.map{ case (name, xpath) => name -> {
           Try(driver.findElementByXPath(xpath, 0).getText.trim()) match {
             case Success(result) => Some(result)

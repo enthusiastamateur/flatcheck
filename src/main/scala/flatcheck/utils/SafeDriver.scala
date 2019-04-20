@@ -13,7 +13,10 @@ import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConverters._
 
-class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSeconds: Int = 20) {
+class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
+  private val timeoutSeconds = options.safeGetInt("general", "safedrivertimeout", Some(10))
+  private val waitForLoad = options.safeGetInt("general", "waitforload", Some(8))
+  private val maxRetry = options.safeGetInt("general", "maxretry", Some(2))
   private var driver : WebDriver = createWebDriver()
   logger.debug(s"Prewarming driver")
   Try{driver.get("www.google.com")}
@@ -44,7 +47,7 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
     driver
   }
 
-  def refresh(maxRetry: Int = 2, retry: Int = 0) : Unit = {
+  def refresh(maxRetry: Int = maxRetry, retry: Int = 0) : Unit = {
     logger.trace(s"Started page refresh, retry = $retry")
     Try{driver.navigate().refresh()} match {
       case Success(_) =>
@@ -64,7 +67,7 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
     }
   }
 
-  def getCurrentUrl(maxRetry: Int = 2, retry: Int = 0): String = {
+  def getCurrentUrl(maxRetry: Int = maxRetry, retry: Int = 0): String = {
     logger.trace(s"Started getCurrentURL, retry = $retry")
     Try{driver.getCurrentUrl} match {
       case Success(value) =>
@@ -100,7 +103,7 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
     }
   }
 
-  def get(url: String, waitForLoad: Int = 8, maxRetry: Int = 2, retry: Int = 0) : Unit = {
+  def get(url: String, waitForLoad: Int = waitForLoad, maxRetry: Int = maxRetry, retry: Int = 0) : Unit = {
     logger.trace(s"Started loading page $url (retry = $retry), will wait $waitForLoad seconds for page to load completely")
     val res = Try{
       driver.get(url)
@@ -122,7 +125,7 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
     }
   }
 
-  def findElementsByXPath(xpath: String, maxRetry: Int = 2, retry: Int = 0) : List[WebElement] = {
+  def findElementsByXPath(xpath: String, maxRetry: Int = maxRetry, retry: Int = 0) : List[WebElement] = {
     logger.trace(s"Started looking for elements by XPath $xpath, retry = $retry")
     val res  = Try{
       driver.findElements(By.xpath(xpath)).asScala.toList
@@ -146,12 +149,12 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
     }
   }
 
-  def findElementByXPath(xpath: String, maxRetry: Int = 2, retry: Int = 0) : WebElement = {
+  def findElementByXPath(xpath: String, maxRetry: Int = maxRetry, retry: Int = 0) : WebElement = {
     val res = findElementsByXPath(xpath, maxRetry, retry)
     res.size match {
       case 0 => throw new NoSuchElementException(s"Did not find element with XPath selector $xpath")
       case rest => if (rest > 1) {
-        logger.trace(s"Found more than one element with XPath selector:$xpath. " +
+        logger.warn(s"Found more than one element with XPath selector:$xpath. " +
           s"Going to use the first element in the list, the complete list is $res")
       }
         res.head
@@ -159,7 +162,7 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
   }
 
   // Will return true if click happened, false otherwise
-  def clickElementByXPath(xpath: String, waitForLoad: Int = 8, maxRetry: Int = 2, retry: Int = 0): Boolean = {
+  def clickElementByXPath(xpath: String, waitForLoad: Int = waitForLoad, maxRetry: Int = maxRetry, retry: Int = 0): Boolean = {
     logger.trace(s"Started clicking on element by XPath $xpath, retry = $retry")
     val res = Try {
       Try(findElementByXPath(xpath, maxRetry)) match {
@@ -197,7 +200,7 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger, val timeoutSe
     }
   }
 
-  def executeJavascript(script: String, timeoutSeconds : Int = 10, maxRetry: Int = 2, retry: Int = 0): Object = {
+  def executeJavascript(script: String, timeoutSeconds : Int = timeoutSeconds, maxRetry: Int = maxRetry, retry: Int = 0): Object = {
     logger.trace(s"Started executing Javascript, retry = $retry")
     val jse = driver.asInstanceOf[JavascriptExecutor]
     val res = Try {
