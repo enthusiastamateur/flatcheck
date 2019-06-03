@@ -46,6 +46,6 @@ mappings in Universal ++= {
       file("auth/flatcheck.json") -> "bin/flatcheck.json")
 }
 
-mappings in Universal ++= directory("chrome").map{ case (file, tgt) =>
+mappings in Universal ++= directory("chrome_exec").map{ case (file, tgt) =>
   (file, tgt.replace("chrome_exec", "bin/chromedriver"))
 }
