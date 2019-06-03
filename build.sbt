@@ -47,5 +47,5 @@ mappings in Universal ++= {
 }
 
 mappings in Universal ++= directory("chrome").map{ case (file, tgt) =>
-  (file, tgt.replace("chrome/", "bin/chromedriver/"))
+  (file, tgt.replace("chrome_exec", "bin/chromedriver"))
 }

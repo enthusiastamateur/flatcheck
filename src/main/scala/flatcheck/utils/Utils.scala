@@ -22,7 +22,7 @@ object Utils extends LazyLogging {
 
   def getOSType() : OSType = {
     val osName: String = System.getProperty("os.name")
-    logger.info(s"The osName string is ")
+    logger.info(s"The osName string is $osName")
     if (osName.toLowerCase().contains("windows")) {
       Windows
     } else {

@@ -25,9 +25,10 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
     )
     email.setSSLOnConnect(options.safeGetBoolean("general", "sslonconnect"))
     Try(email.getMailSession.getTransport().connect()) match {
-      case Failure(_: AuthenticationFailedException) =>
+      case Failure(e: AuthenticationFailedException) =>
         logger.error(s"Authentication has failed, " +
           s"please check the email address and password in the flatcheck.ini file!")
+        throw e
         System.exit(1)
       case Failure(e) => throw e
       case Success(_) => logger.info("SMTP credentials successfully verified!")
