@@ -24,8 +24,8 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
     case Unix => "/usr/bin/google-chrome"
   }
   private val chromeDriverLocation  = Utils.getOSType() match {
-    case Windows => "./chrome/chromedriver_74.0.3729.6.exe"
-    case Unix => "./chrome/chromedriver_74.0.3729.6_linux_64"
+    case Windows => "./chromedriver/chromedriver_74.0.3729.6.exe"
+    case Unix => "./chromedriver/chromedriver_74.0.3729.6_linux_64"
   }
   private var driver : WebDriver = createWebDriver()
   logger.debug(s"Prewarming driver")
