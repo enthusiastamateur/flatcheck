@@ -2,13 +2,15 @@ package flatcheck.utils
 
 import java.util.concurrent.TimeUnit
 import java.util.logging.Level
+
 import com.machinepublishers.jbrowserdriver.{JBrowserDriver, Settings, UserAgent}
 import com.typesafe.scalalogging.Logger
 import flatcheck.config.FlatcheckConfig
-import org.openqa.selenium.chrome.ChromeDriver
+import org.openqa.selenium.chrome.{ChromeDriver, ChromeOptions}
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.ie.InternetExplorerDriver
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
+
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConverters._
@@ -20,11 +22,25 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
   private var driver : WebDriver = createWebDriver()
   logger.debug(s"Prewarming driver")
   Try{driver.get("www.google.com")}
+  private val binaryLocation = Utils.getOSType() match {
+    case Windows => "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+    case Unix => "/usr/bin/google-chrome"
+  }
+  private val chromeDriverLocation = Utils.getOSType() match {
+    case Windows => "./chrome/chromedriver_74.0.3729.6.exe"
+    case Unix => "./chrome/chromedriver_74.0.3729.6_linux_64"
+  }
 
   def createWebDriver(): WebDriver = {
     val driver = options.get("general", "browser").toLowerCase match {
       case "ie" | "internetexplorer" | "explorer" => new InternetExplorerDriver()
-      case "chrome" => new ChromeDriver()
+      case "chrome" => {
+        System.setProperty("webdriver.chrome.driver", chromeDriverLocation)
+        val options = new ChromeOptions().setHeadless(true).
+          setBinary(binaryLocation).
+          addArguments("start-maximized", "disable-infobars", "--disable-extensions", "--incognito")
+        new ChromeDriver(options)
+      }
       case "firefox" => new FirefoxDriver()
       case "jbrowser" => new JBrowserDriver(Settings.builder()
         .processes(4)
@@ -171,7 +187,9 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
             logger.trace(s"Clicking on next page button with text '${button.getText}', " +
               s"will wait $waitForLoad seconds afterwards")
             logger.trace(s"Details of the nextPageButton:\n${Utils.getWebElementDetails(button).mkString("\n")}")
-            button.click()
+            val jse = driver.asInstanceOf[JavascriptExecutor]
+            jse.executeScript("arguments[0].click();", button)
+            //button.click()
             Thread.sleep(waitForLoad * 1000)
             true
           } else {
