@@ -19,22 +19,25 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
   private val timeoutSeconds = options.safeGetInt("general", "safedrivertimeout", Some(10))
   private val waitForLoad = options.safeGetInt("general", "waitforload", Some(8))
   private val maxRetry = options.safeGetInt("general", "maxretry", Some(2))
-  private var driver : WebDriver = createWebDriver()
-  logger.debug(s"Prewarming driver")
-  Try{driver.get("www.google.com")}
   private val binaryLocation = Utils.getOSType() match {
     case Windows => "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
     case Unix => "/usr/bin/google-chrome"
   }
-  private val chromeDriverLocation = Utils.getOSType() match {
+  private val chromeDriverLocation  = Utils.getOSType() match {
     case Windows => "./chrome/chromedriver_74.0.3729.6.exe"
     case Unix => "./chrome/chromedriver_74.0.3729.6_linux_64"
   }
+  private var driver : WebDriver = createWebDriver()
+  logger.debug(s"Prewarming driver")
+  Try{driver.get("www.google.com")}
+
 
   def createWebDriver(): WebDriver = {
     val driver = options.get("general", "browser").toLowerCase match {
       case "ie" | "internetexplorer" | "explorer" => new InternetExplorerDriver()
       case "chrome" => {
+        logger.info(s"The chromedriver location is $chromeDriverLocation")
+        logger.info(s"The chrome binary location is $binaryLocation")
         System.setProperty("webdriver.chrome.driver", chromeDriverLocation)
         val options = new ChromeOptions().setHeadless(true).
           setBinary(binaryLocation).

@@ -1,5 +1,6 @@
 // Copy the ini next to the executable we'll start
 import com.typesafe.sbt.SbtNativePackager.Universal
+import com.typesafe.sbt.packager.MappingsHelper.directory
 
 scalaVersion := "2.12.8"
 
@@ -42,6 +43,9 @@ javaOptions in Universal ++= Seq(
 mappings in Universal ++= {
     Seq(
       file("flatcheck.ini") -> "bin/flatcheck.ini",
-      file("auth/flatcheck.json") -> "bin/flatcheck.json",
-      file("chrome") -> "bin/chromedriver")
+      file("auth/flatcheck.json") -> "bin/flatcheck.json")
+}
+
+mappings in Universal ++= directory("chrome").map{ case (file, tgt) =>
+  (file, tgt.replace("chrome/", "bin/chromedriver/"))
 }
