@@ -9,7 +9,7 @@ import flatcheck.config.FlatcheckConfig
 import org.openqa.selenium.chrome.{ChromeDriver, ChromeOptions}
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.ie.InternetExplorerDriver
-import org.openqa.selenium.{By, JavascriptExecutor, WebDriver, WebElement}
+import org.openqa.selenium.{TimeoutException => _, _}
 
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
@@ -41,6 +41,7 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
         System.setProperty("webdriver.chrome.driver", chromeDriverLocation)
         val options = new ChromeOptions().setHeadless(true).
           setBinary(binaryLocation).
+          setPageLoadStrategy(PageLoadStrategy.NONE).
           addArguments("start-maximized", "disable-infobars", "--disable-extensions", "--incognito")
         new ChromeDriver(options)
       }
