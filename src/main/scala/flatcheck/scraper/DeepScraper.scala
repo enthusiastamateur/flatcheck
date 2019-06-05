@@ -137,9 +137,10 @@ class DeepScraper(val config: FlatcheckConfig,
               }
               // Send notification email
               val sendTo = config.safeGetString(parseSite, "sendto").split(",").toList
+              val baseURL = config.safeGetString(parseSite, "baseurl")
               if (newScrapedOffers.nonEmpty) {
                 if (sendTo.nonEmpty) {
-                  mailer.sendOfferNotification(newScrapedOffers, sendTo)
+                  mailer.sendOfferNotification(newScrapedOffers, sendTo, baseURL)
                 } else {
                   logger.debug(s"No recipients marked for site $parseSite, will not send any emails")
                 }

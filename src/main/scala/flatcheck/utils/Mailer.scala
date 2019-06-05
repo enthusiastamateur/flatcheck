@@ -55,7 +55,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
     logger.info(s"  Email with subject $subject sent to: $toAddresses !")
   }
 
-  def sendOfferNotification(offers: List[(String, String, OfferDetail)], toAddresses: List[String]): Unit = {
+  def sendOfferNotification(offers: List[(String, String, OfferDetail)], toAddresses: List[String], baseURL: String): Unit = {
     val linksHtml = offers.zipWithIndex.map{ case ((siteName, link, (_, priceHUF, sizeSM, roomsNum, address, area, _, _, flatCondition, orientation)), idx) =>
       if (idx % 2 == 0) {
         s"""
@@ -124,7 +124,7 @@ class Mailer(val options: FlatcheckConfig) extends LazyLogging {
         |<table class="tg">
         |    <thead>
         |        <tr>
-        |            <th class="tg-ddb2 " colspan="8"><span style="font-size: 24px;">$searchName</span></th>
+        |            <th class="tg-ddb2 " colspan="8"><span style="font-size: 24px;"><a style="color: #126cbb;" href="$baseURL" target="_blank" rel="noopener">$searchName</a></span></th>
         |        </tr>
         |    </thead>
         |    <tbody>
