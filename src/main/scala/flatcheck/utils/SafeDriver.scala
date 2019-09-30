@@ -40,6 +40,7 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
         logger.info(s"The chrome binary location is $binaryLocation")
         System.setProperty("webdriver.chrome.driver", chromeDriverLocation)
         val options = new ChromeOptions().setHeadless(true).
+          setExperimentalOption("w3c", false).
           setBinary(binaryLocation).
           setPageLoadStrategy(PageLoadStrategy.NONE).
           addArguments("start-maximized", "disable-infobars", "--disable-extensions", "--incognito")
