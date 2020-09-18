@@ -16,7 +16,7 @@ import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConverters._
 
 class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
-  private val timeoutSeconds = options.safeGetInt("general", "safedrivertimeout", Some(10))
+  private val timeoutSeconds = options.safeGetInt("general", "safedrivertimeout", Some(30))
   private val waitForLoad = options.safeGetInt("general", "waitforload", Some(8))
   private val maxRetry = options.safeGetInt("general", "maxretry", Some(2))
   private val binaryLocation = Utils.getOSType() match {
@@ -43,7 +43,22 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
           setExperimentalOption("w3c", false).
           setBinary(binaryLocation).
           setPageLoadStrategy(PageLoadStrategy.NONE).
-          addArguments("start-maximized", "disable-infobars", "--disable-extensions", "--incognito")
+          addArguments(
+            "start-maximized",
+            "enable-automation",
+            "disable-infobars",
+            "--disable-extensions",
+            "--incognito",
+            "--no-sandbox",
+            "--disable-infobars",
+            "--disable-dev-shm-usage",
+            "--disable-browser-side-navigation",
+            "--disable-gpu",
+            "--dns-prefetch-disable",
+            "--aggressive-cache-discard",
+            "--disable-cache",
+            "--disable-application-cache"
+          )
         new ChromeDriver(options)
       }
       case "firefox" => new FirefoxDriver()
@@ -62,9 +77,9 @@ class SafeDriver(val options: FlatcheckConfig, val logger: Logger) {
         .build())
       case rest => throw new IllegalArgumentException(s"Unknown driver: $rest")
     }
-    driver.manage().timeouts().pageLoadTimeout(10L, TimeUnit.SECONDS)
-    driver.manage().timeouts().setScriptTimeout(10L, TimeUnit.SECONDS)
-    driver.manage().timeouts().implicitlyWait(10L, TimeUnit.SECONDS)
+    driver.manage().timeouts().pageLoadTimeout(30L, TimeUnit.SECONDS)
+    driver.manage().timeouts().setScriptTimeout(30L, TimeUnit.SECONDS)
+    driver.manage().timeouts().implicitlyWait(30L, TimeUnit.SECONDS)
     driver
   }
 
